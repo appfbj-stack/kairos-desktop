@@ -1,18 +1,11 @@
-/**
- * App root - layout principal com Sidebar + ChatPanel.
- */
-
 import { Sidebar } from './components/Sidebar/Sidebar.js';
 import { ChatPanel } from './components/Chat/ChatPanel.js';
-import { useChatStore } from './store/chat.store.js';
 
 export function App() {
-  const sidebarOpen = useChatStore((s) => s.sidebarOpen);
-
   return (
-    <div className="app-shell">
+    <div style={{ display: 'flex', height: '100%' }}>
       <Sidebar />
-      <main className="app-main">
+      <main style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <ChatPanel />
       </main>
     </div>

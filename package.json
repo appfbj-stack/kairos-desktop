@@ -1,79 +1,79 @@
 {
-  "name": "kairos-desktop",
-  "version": "0.1.0",
-  "description": "Kairos Desktop AI - Assistente empresarial inteligente para Windows, powered by OpenSquad.",
-  "main": "dist/main/index.js",
-  "type": "module",
-  "private": true,
-  "author": "Fernando Borges <fernandojaborges@gmail.com>",
-  "license": "MIT",
-  "homepage": "https://kairosdesktop.fbautomacao.space",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/appfbj-stack/kairos-desktop.git"
-  },
-  "bugs": {
-    "url": "https://github.com/appfbj-stack/kairos-desktop/issues"
-  },
-  "engines": {
-    "node": ">=20.0.0"
-  },
-  "workspaces": [
-    "core",
-    "deploy/update-server"
-  ],
-  "scripts": {
-    "dev": "node scripts/dev.mjs",
-    "dev:core": "npm run dev -w kairos-core",
-    "dev:electron": "node scripts/dev-electron.mjs",
-    "build": "node scripts/build.mjs",
-    "build:main": "tsc -p tsconfig.main.json",
-    "build:renderer": "vite build",
-    "build:preload": "tsc -p tsconfig.preload.json",
-    "build:core": "npm run build -w kairos-core",
-    "package": "electron-builder",
-    "lint": "eslint . --ext .ts,.tsx",
-    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,css,html}\"",
-    "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "node --test tests/**/*.test.ts",
-    "test:openrouter": "tsc -p tests/tsconfig.test.json && copy-item -Force core/infrastructure/memory/migrations/*.sql .test-build/core/infrastructure/memory/migrations/ && node --env-file=.env .test-build/tests/integration/test-openrouter.js",
-    "test:memory": "tsc -p tests/tsconfig.test.json && copy-item -Force core/infrastructure/memory/migrations/*.sql .test-build/core/infrastructure/memory/migrations/ && node .test-build/tests/integration/test-memory.js",
-    "kairos:init": "node scripts/kairos-init.mjs"
-  },
-  "dependencies": {
-    "@anthropic-ai/sdk": "^0.30.0",
-    "chokidar": "^4.0.3",
-    "electron-store": "^10.0.1",
-    "electron-updater": "^6.3.9",
-    "fastify": "^5.1.0",
-    "@fastify/cors": "^10.0.1",
-    "node-fetch": "^3.3.2",
-    "openai": "^4.71.0",
-    "pino": "^9.5.0",
-    "pino-pretty": "^11.3.0",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "uuid": "^11.0.3",
-    "ws": "^8.18.1",
-    "yaml": "^2.7.1",
-    "zod": "^3.23.8",
-    "zustand": "^5.0.2"
-  },
-  "devDependencies": {
-    "@types/node": "^22.9.0",
-    "@types/react": "^18.3.12",
-    "@types/react-dom": "^18.3.1",
-    "@types/uuid": "^10.0.0",
-    "@types/ws": "^8.5.13",
-    "@typescript-eslint/eslint-plugin": "^8.15.0",
-    "@typescript-eslint/parser": "^8.15.0",
-    "@vitejs/plugin-react": "^4.3.4",
-    "electron": "^33.2.0",
-    "electron-builder": "^25.1.8",
-    "eslint": "^9.15.0",
-    "prettier": "^3.3.3",
-    "tsx": "^4.19.2",
-    "typescript": "^5.6.3",
-    "vite": "^6.0.1"
-  }
+    "name":  "kairos-desktop",
+    "version":  "0.1.0",
+    "description":  "Kairos Desktop AI - Assistente empresarial inteligente para Windows, powered by OpenSquad.",
+    "main":  "dist/main/window.js",
+    "type":  "module",
+    "private":  true,
+    "author":  "Fernando Borges \u003cfernandojaborges@gmail.com\u003e",
+    "license":  "MIT",
+    "homepage":  "https://kairosdesktop.fbautomacao.space",
+    "repository":  {
+                       "type":  "git",
+                       "url":  "git+https://github.com/appfbj-stack/kairos-desktop.git"
+                   },
+    "bugs":  {
+                 "url":  "https://github.com/appfbj-stack/kairos-desktop/issues"
+             },
+    "engines":  {
+                    "node":  "\u003e=20.0.0"
+                },
+    "workspaces":  [
+                       "core",
+                       "deploy/update-server"
+                   ],
+    "scripts":  {
+                    "dev":  "node scripts/dev.mjs",
+                    "dev:core":  "npm run dev -w kairos-core",
+                    "dev:electron":  "node scripts/dev-electron.mjs",
+                    "build":  "node scripts/build.mjs",
+                    "build:main":  "tsc -p tsconfig.main.json",
+                    "build:renderer":  "vite build",
+                    "build:preload":  "node scripts/build-preload.mjs",
+                    "build:core":  "npm run build -w kairos-core",
+                    "package":  "electron-builder",
+                    "lint":  "eslint . --ext .ts,.tsx",
+                    "format":  "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,css,html}\"",
+                    "typecheck":  "tsc --noEmit -p tsconfig.json",
+                    "test":  "node --test tests/**/*.test.ts",
+                    "test:openrouter":  "tsc -p tests/tsconfig.test.json \u0026\u0026 copy-item -Force core/infrastructure/memory/migrations/*.sql .test-build/core/infrastructure/memory/migrations/ \u0026\u0026 node --env-file=.env .test-build/tests/integration/test-openrouter.js",
+                    "test:memory":  "tsc -p tests/tsconfig.test.json \u0026\u0026 copy-item -Force core/infrastructure/memory/migrations/*.sql .test-build/core/infrastructure/memory/migrations/ \u0026\u0026 node .test-build/tests/integration/test-memory.js",
+                    "kairos:init":  "node scripts/kairos-init.mjs"
+                },
+    "dependencies":  {
+                         "@anthropic-ai/sdk":  "^0.30.0",
+                         "chokidar":  "^4.0.3",
+                         "electron-store":  "^10.0.1",
+                         "electron-updater":  "^6.3.9",
+                         "fastify":  "^5.1.0",
+                         "@fastify/cors":  "^10.0.1",
+                         "node-fetch":  "^3.3.2",
+                         "openai":  "^4.71.0",
+                         "pino":  "^9.5.0",
+                         "pino-pretty":  "^11.3.0",
+                         "react":  "^18.3.1",
+                         "react-dom":  "^18.3.1",
+                         "uuid":  "^11.0.3",
+                         "ws":  "^8.18.1",
+                         "yaml":  "^2.7.1",
+                         "zod":  "^3.23.8",
+                         "zustand":  "^5.0.2"
+                     },
+    "devDependencies":  {
+                            "@types/node":  "^22.9.0",
+                            "@types/react":  "^18.3.12",
+                            "@types/react-dom":  "^18.3.1",
+                            "@types/uuid":  "^10.0.0",
+                            "@types/ws":  "^8.5.13",
+                            "@typescript-eslint/eslint-plugin":  "^8.15.0",
+                            "@typescript-eslint/parser":  "^8.15.0",
+                            "@vitejs/plugin-react":  "^4.3.4",
+                            "electron":  "^33.2.0",
+                            "electron-builder":  "^25.1.8",
+                            "eslint":  "^9.15.0",
+                            "prettier":  "^3.3.3",
+                            "tsx":  "^4.19.2",
+                            "typescript":  "^5.6.3",
+                            "vite":  "^6.0.1"
+                        }
 }

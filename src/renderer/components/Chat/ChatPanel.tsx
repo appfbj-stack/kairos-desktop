@@ -1,13 +1,5 @@
 /**
  * ChatPanel - area principal de conversa.
- *
- * Features:
- *  - Lista de mensagens
- *  - Input com submit (Enter) + shift+enter para nova linha
- *  - Botao de voz (Web Speech API)
- *  - Streaming em tempo real
- *  - Auto-scroll
- *  - Mostra provider/model usado
  */
 
 import { useEffect, useRef, useState } from 'react';
@@ -16,9 +8,17 @@ import { chatApi } from '../../lib/chat-api.js';
 import { VoiceButton } from './VoiceButton.js';
 import './ChatPanel.css';
 
+function safeUuid(): string {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return Math.random().toString(36).slice(2) + Date.now().toString(36);
+}
+
 export function ChatPanel() {
   const activeId = useChatStore((s) => s.activeId);
   const conversations = useChatStore((s) => s.conversations);
+  const conversationIds = useChatStore((s) => s.conversationIds);
   const addMessage = useChatStore((s) => s.addMessage);
   const appendToMessage = useChatStore((s) => s.appendToMessage);
   const finalizeMessage = useChatStore((s) => s.finalizeMessage);
@@ -27,21 +27,17 @@ export function ChatPanel() {
   const newConversation = useChatStore((s) => s.newConversation);
 
   const [input, setInput] = useState('');
-  const [provider, setProvider] = useState('openrouter');
   const [model, setModel] = useState('openai/gpt-oss-20b:free');
   const [coreStatus, setCoreStatus] = useState<'checking' | 'online' | 'offline'>('checking');
   const scrollRef = useRef<HTMLDivElement>(null);
-  const abortRef = useRef<AbortController | null>(null);
 
-  const conversation = activeId ? conversations.get(activeId) : null;
-  const messages = conversation?.messages || [];
+  const conversation = activeId ? conversations[activeId] : null;
+  const messages: ChatMessage[] = conversation?.messages || [];
 
-  // Auto-scroll no final quando streaming
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
-  }, [messages]);
+  }, [messages.length]);
 
-  // Health check do Core ao montar
   useEffect(() => {
     chatApi
       .health()
@@ -49,44 +45,41 @@ export function ChatPanel() {
       .catch(() => setCoreStatus('offline'));
   }, []);
 
-  // Cria conversa inicial
   useEffect(() => {
-    if (!activeId) newConversation();
-  }, [activeId, newConversation]);
+    if (!activeId) {
+      newConversation();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function sendMessage(text: string) {
     if (!text.trim() || isStreaming || !activeId) return;
     const convId = activeId;
 
-    // Adiciona mensagem do user
-    const userMsg: Omit<ChatMessage, 'ts'> = { id: crypto.randomUUID(), role: 'user', content: text };
+    const userMsg: Omit<ChatMessage, 'ts'> = { id: safeUuid(), role: 'user', content: text };
     addMessage(convId, userMsg);
     setInput('');
 
-    // Prepara mensagem do assistant (vazia, sera preenchida pelo stream)
-    const assistantId = crypto.randomUUID();
+    const assistantId = safeUuid();
     addMessage(convId, { id: assistantId, role: 'assistant', content: '', streaming: true });
     setStreaming(true);
 
-    // Recall de memoria (injeta contexto da empresa se houver)
-    let systemPrompt = 'Voce eh o Kairos, um assistente de IA para Windows. Responda em portugues do Brasil de forma clara e util.';
+    let systemPrompt = 'Voce eh o Kairos, um assistente de IA para Windows. Responda em portugues do Brasil.';
     try {
       const recalled = await chatApi.recall(text, 3);
       if (recalled.context) {
-        systemPrompt += '\n\n## Contexto da empresa\n' + recalled.context;
+        systemPrompt += '\n\n## Contexto\n' + recalled.context;
       }
     } catch {
-      // Core offline - segue sem contexto
+      // sem contexto
     }
 
-    abortRef.current = new AbortController();
     let fullContent = '';
-
     try {
       for await (const chunk of chatApi.chatStream({
         messages: [{ role: 'user', content: text }],
         systemPrompt,
-        provider,
+        provider: 'openrouter',
         model,
         maxTokens: 600,
       })) {
@@ -102,7 +95,6 @@ export function ChatPanel() {
     } finally {
       finalizeMessage(convId, assistantId);
       setStreaming(false);
-      abortRef.current = null;
     }
   }
 
@@ -116,9 +108,7 @@ export function ChatPanel() {
   return (
     <div className="chat-panel">
       <header className="chat-header">
-        <div className="chat-title">
-          {conversation?.title || 'Nova conversa'}
-        </div>
+        <div className="chat-title">{conversation?.title || 'Nova conversa'}</div>
         <div className="chat-meta">
           <span className={`core-status core-${coreStatus}`}>
             {coreStatus === 'online' ? '● online' : coreStatus === 'offline' ? '○ offline' : '⟳ verificando'}
@@ -139,15 +129,9 @@ export function ChatPanel() {
             <h2>Ola! Sou o Kairos.</h2>
             <p>Me pergunte qualquer coisa, ou use o botao de voz 🎤.</p>
             <div className="suggestions">
-              <button onClick={() => setInput('O que voce pode fazer por mim?')}>
-                O que voce pode fazer?
-              </button>
-              <button onClick={() => setInput('Me ajude a organizar minha semana.')}>
-                Me ajude a organizar minha semana
-              </button>
-              <button onClick={() => setInput('Resuma as ultimas noticias de tecnologia.')}>
-                Resuma as ultimas noticias de tecnologia
-              </button>
+              <button onClick={() => setInput('O que voce pode fazer por mim?')}>O que voce pode fazer?</button>
+              <button onClick={() => setInput('Me ajude a organizar minha semana.')}>Me ajude a organizar minha semana</button>
+              <button onClick={() => setInput('Resuma as ultimas noticias de tecnologia.')}>Resuma as ultimas noticias de tecnologia</button>
             </div>
           </div>
         )}
@@ -157,13 +141,10 @@ export function ChatPanel() {
       </div>
 
       <footer className="chat-input-area">
-        <VoiceButton
-          onTranscript={(text) => sendMessage(text)}
-          disabled={isStreaming}
-        />
+        <VoiceButton onTranscript={(text) => sendMessage(text)} disabled={isStreaming} />
         <textarea
           className="chat-input"
-          placeholder={isStreaming ? 'Aguardando resposta...' : 'Pergunte algo ao Kairos... (Enter envia, Shift+Enter quebra linha)'}
+          placeholder={isStreaming ? 'Aguardando resposta...' : 'Pergunte algo ao Kairos... (Enter envia)'}
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}

@@ -1,8 +1,8 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "module": "ESNext",
-    "moduleResolution": "Bundler",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
     "lib": ["ES2022", "DOM"],
     "outDir": "dist/preload",
     "rootDir": "src/preload",
@@ -15,6 +15,6 @@
       "@shared/*": ["src/shared/*"]
     }
   },
-  "include": ["src/preload/**/*", "src/shared/**/*"],
+  "include": ["src/preload/**/*"],
   "exclude": ["node_modules", "dist"]
 }

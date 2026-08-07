@@ -73,3 +73,15 @@ secrets/
 
 # Test build output
 .test-build/
+
+# Diagnostic marker (escrito pelo preload pra confirmar execucao)
+.preload-ran.flag
+
+# TypeScript build artifacts (são gerados pelo tsc, nao devem ir pro git)
+core/**/*.js
+core/**/*.js.map
+core/**/*.d.ts
+src/shared/**/*.js
+src/shared/**/*.js.map
+src/shared/**/*.d.ts
+src/renderer/postcss.config.cjs

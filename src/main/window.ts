@@ -3,18 +3,30 @@
  */
 
 import { app, BrowserWindow, shell, ipcMain } from 'electron';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { logger } from './services/logger.js';
 import { startCore, stopCore, kairosCore } from './services/core-bridge.js';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
+
+// Em dev, switches do Chromium devem ser definidos ANTES do app.ready
+if (isDev) {
+  app.commandLine.appendSwitch('disable-web-security');
+  app.commandLine.appendSwitch('disable-features', 'IsolateOrigins,site-per-process');
+}
 const VITE_URL = 'http://127.0.0.1:5173';
 const RENDERER_HTML = join(process.cwd(), 'dist', 'renderer', 'index.html');
 
 let mainWindow: BrowserWindow | null = null;
 
 async function createMainWindow() {
+  const preloadPath = join(__dirname, '..', 'preload', 'index.cjs');
+  logger.info({ preloadPath, exists: existsSync(preloadPath) }, 'Creating main window');
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 800,
@@ -26,10 +38,13 @@ async function createMainWindow() {
     title: 'Kairos',
     icon: undefined, // TODO Fase 3.1
     webPreferences: {
-      preload: join(__dirname, '..', 'preload', 'index.js'),
+      preload: preloadPath,
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
+      // Dev: permite fetch cross-origin para o Core
+      // (em prod, o Core sera in-process ou via IPC)
+      webSecurity: !app.isPackaged,
     },
   });
 

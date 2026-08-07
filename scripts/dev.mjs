@@ -37,8 +37,11 @@ function startProc(name, command, args, options = {}) {
 
   proc.on('exit', (code) => {
     if (!shuttingDown) {
-      console.error(`\n\x1b[31m[kairos] ${name} exited with code ${code}\x1b[0m`);
-      shutdown(code || 1);
+      // Da tempo do stderr drenar
+      setTimeout(() => {
+        console.error(`\n\x1b[31m[kairos] ${name} exited with code ${code}\x1b[0m`);
+        shutdown(code || 1);
+      }, 100);
     }
   });
 

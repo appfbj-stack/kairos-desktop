@@ -1,14 +1,17 @@
 /**
  * Preload script - context bridge entre Electron main e renderer.
  *
- * Expoe API segura (sem nodeIntegration) para o React renderer.
- * Operacoes simples via contextBridge; operacoes de streaming vao
- * direto via HTTP do renderer para o Core.
+ * IMPORTANTE: Electron 33 tem problemas pra carregar preload como ESM (.js)
+ * mesmo com package.json "type": "module". Solucao: compilar como CommonJS
+ * e salvar como .cjs (o sufixo .cjs forca CommonJS independente do package.json).
+ *
+ * Expoe API segura (sem nodeIntegration) para o React renderer via
+ * contextBridge. Operacoes vao via IPC -> main process -> Core.
  */
 
 import { contextBridge, ipcRenderer } from 'electron';
 
-const api = {
+export const api = {
   chat: {
     send: (payload: unknown) => ipcRenderer.invoke('chat:send', payload),
     cancel: (conversationId: string) => ipcRenderer.invoke('chat:cancel', conversationId),
@@ -32,5 +35,13 @@ const api = {
   },
 };
 
-contextBridge.exposeInMainWorld('kairos', api);
+try {
+  contextBridge.exposeInMainWorld('kairos', api);
+  // eslint-disable-next-line no-console
+  console.log('[Kairos preload] window.kairos exposto:', Object.keys(api));
+} catch (err) {
+  // eslint-disable-next-line no-console
+  console.error('[Kairos preload] ERRO ao expor API:', err);
+}
+
 export type KairosApi = typeof api;

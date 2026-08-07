@@ -1,12 +1,13 @@
 /**
- * Cliente HTTP para o Kairos AI Core (localhost:4096).
+ * Cliente IPC para o Kairos AI Core.
  *
- * Faz requests diretos do renderer para o Core.
- * O preload contextBridge expoe window.kairos para operacoes privilegiadas;
- * operacoes normais (chat, memory, etc) podem ser feitas via HTTP direto.
+ * Todas as chamadas passam pelo bridge `window.kairos` (contextBridge) -
+ * a main process do Electron faz o fetch no Core em :4096 internamente.
+ *
+ * Isso contorna o bloqueio CSP/CORS do Chromium no renderer, mesmo com
+ * `webSecurity: false`. O fetch direto cross-origin para 127.0.0.1:4096
+ * falha no Electron moderno.
  */
-
-const CORE_BASE_URL = 'http://127.0.0.1:4096';
 
 export interface ChatInput {
   messages: Array<{
@@ -27,71 +28,108 @@ export interface ChatChunk {
   error?: string;
 }
 
+/** Verifica se o bridge IPC esta exposto (preload rodou). */
+function checkBridge(): void {
+  if (typeof window === 'undefined') {
+    throw new Error('window indisponivel (SSR?)');
+  }
+  if (!window.kairos) {
+    // Diagnostico: log detalhado para entender o que esta exposto
+    // eslint-disable-next-line no-console
+    console.error('[chat-api] window.kairos undefined. window keys:', Object.keys(window).filter((k) => k.toLowerCase().includes('kairos') || k === 'ipcRenderer' || k === 'electron'));
+    throw new Error('Bridge IPC indisponivel - preload nao carregou. Abra DevTools (Ctrl+Shift+I) e veja [Kairos preload] nos logs.');
+  }
+}
+
 export const chatApi = {
-  baseUrl: CORE_BASE_URL,
-
-  health: () => fetch(`${CORE_BASE_URL}/health`).then((r) => r.json()),
-
-  listProviders: () => fetch(`${CORE_BASE_URL}/llm/providers`).then((r) => r.json()),
+  baseUrl: 'ipc://kairos',
 
   /**
-   * Chat streaming via Server-Sent Events.
-   * Retorna um AsyncIterable de chunks.
+   * Health check via IPC. Pinga o Core para verificar conectividade.
+   */
+  health: async (): Promise<{ ok: boolean; core?: any }> => {
+    try {
+      checkBridge();
+      // Ping Core via IPC - se o Core estiver down, o handler lanca erro
+      const providers = await window.kairos.llm.listProviders();
+      return { ok: true, core: { status: 'online', providers } };
+    } catch (err) {
+      return { ok: false, core: { status: 'offline', error: (err as Error).message } };
+    }
+  },
+
+  listProviders: async () => {
+    try {
+      checkBridge();
+      return await window.kairos.llm.listProviders();
+    } catch (err) {
+      return { providers: [], error: (err as Error).message };
+    }
+  },
+
+  /**
+   * Chat via IPC. Usa /chat/sync (sem streaming real, mas mantemos UX
+   * de "digitando" chunkando a resposta final no renderer).
+   *
+   * Para streaming real via IPC seria necessario webContents.send
+   * + ipcRenderer.on, mas para v1 isto ja entrega a experiencia desejada.
    */
   async *chatStream(input: ChatInput): AsyncIterable<ChatChunk> {
-    const res = await fetch(`${CORE_BASE_URL}/chat`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(input),
-    });
-    if (!res.ok || !res.body) {
-      const text = await res.text().catch(() => '');
-      throw new Error(`Core HTTP ${res.status}: ${text}`);
+    checkBridge();
+    let result: any;
+    try {
+      result = await window.kairos.chat.send(input);
+    } catch (err) {
+      yield { type: 'error', error: (err as Error).message };
+      return;
     }
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n\n');
-      buffer = lines.pop() || '';
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed.startsWith('data:')) continue;
-        const data = trimmed.slice(5).trim();
-        if (data === '[DONE]') return;
-        try {
-          yield JSON.parse(data) as ChatChunk;
-        } catch {
-          // ignora
-        }
+
+    if (!result) {
+      yield { type: 'error', error: 'Resposta vazia do Core' };
+      return;
+    }
+    if (result.error) {
+      yield { type: 'error', error: result.error };
+      return;
+    }
+
+    const text: string = result.content || result.message || '';
+    if (text) {
+      // Simula streaming chunk a chunk para manter efeito "digitando"
+      const CHUNK_SIZE = 5;
+      for (let i = 0; i < text.length; i += CHUNK_SIZE) {
+        yield { type: 'content', content: text.slice(i, i + CHUNK_SIZE) };
+        // Pausa proporcional para parecer digitacao natural
+        await new Promise((r) => setTimeout(r, 22));
       }
+    } else {
+      yield { type: 'error', error: 'Core retornou resposta sem content' };
+      return;
+    }
+    yield { type: 'done' };
+  },
+
+  /**
+   * Memory: recall entities (formato contexto markdown).
+   */
+  recall: async (query: string, _limit = 5) => {
+    try {
+      checkBridge();
+      return await window.kairos.memory.recall(query);
+    } catch {
+      return { context: '' };
     }
   },
 
   /**
-   * Memory: recall entities (formato contexto markdown)
+   * Memory: list entities.
    */
-  recall: async (query: string, limit = 5) => {
-    const res = await fetch(`${CORE_BASE_URL}/memory/recall`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query, limit }),
-    });
-    if (!res.ok) return { context: '' };
-    return res.json();
-  },
-
-  /**
-   * Memory: list entities
-   */
-  listEntities: async (q?: string, type?: string) => {
-    const params = new URLSearchParams();
-    if (q) params.set('q', q);
-    if (type) params.set('type', type);
-    const res = await fetch(`${CORE_BASE_URL}/memory/entities?${params}`);
-    return res.json();
+  listEntities: async (_q?: string, _type?: string) => {
+    try {
+      checkBridge();
+      return await window.kairos.memory.search('');
+    } catch {
+      return { entities: [] };
+    }
   },
 };

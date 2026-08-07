@@ -1,77 +1,35 @@
 /**
  * Bridge para o Kairos AI Core (Fastify em :4096).
  *
- * O Core roda como subprocesso Node (tsx) ou importado in-process (Fase 3+).
- * Aqui encapsulamos as chamadas HTTP.
+ * No dev: o Core ja esta rodando (iniciado pelo scripts/dev.mjs).
+ * Aqui apenas verificamos se esta online e encapsulamos as chamadas HTTP.
+ *
+ * Em prod (futuro), o Core sera importado in-process.
  */
 
-import { spawn, ChildProcess } from 'node:child_process';
-import { existsSync } from 'node:fs';
-import { join } from 'node:path';
 import { logger } from './logger.js';
 
 const CORE_PORT = Number(process.env.KAIROS_PORT || 4096);
 const CORE_BASE_URL = `http://127.0.0.1:${CORE_PORT}`;
 
-let coreProcess: ChildProcess | null = null;
 let isReady = false;
 
 export async function startCore(): Promise<void> {
-  if (coreProcess) return;
-
-  // Inicia o Core como subprocesso
-  const coreEntry = join(process.cwd(), 'core', 'server.ts');
-  const envFile = join(process.cwd(), '.env');
-
-  if (!existsSync(coreEntry)) {
-    logger.warn(`Core nao encontrado: ${coreEntry} - assumindo Core externo`);
-    return;
-  }
-
-  const args = ['tsx'];
-  if (existsSync(envFile)) args.push(`--env-file=${envFile}`);
-  args.push(coreEntry);
-
-  logger.info(`Starting Kairos Core: npx ${args.join(' ')}`);
-
-  coreProcess = spawn('npx.cmd', args, {
-    cwd: process.cwd(),
-    env: {
-      ...process.env,
-      KAIROS_PORT: String(CORE_PORT),
-      KAIROS_HOST: '127.0.0.1',
-    },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-
-  coreProcess.stdout?.on('data', (d) => logger.info({ source: 'core' }, d.toString().trim()));
-  coreProcess.stderr?.on('data', (d) => logger.error({ source: 'core' }, d.toString().trim()));
-
-  coreProcess.on('exit', (code) => {
-    logger.warn({ code }, 'Core process exited');
-    coreProcess = null;
-    isReady = false;
-  });
-
-  // Espera ficar pronto
-  for (let i = 0; i < 30; i++) {
-    await new Promise((r) => setTimeout(r, 500));
-    if (isReady) {
-      logger.info(`Kairos Core pronto em ${CORE_BASE_URL}`);
-      return;
-    }
+  // No dev, o Core ja esta rodando. Apenas verifica.
+  for (let i = 0; i < 10; i++) {
     try {
       const res = await fetch(`${CORE_BASE_URL}/health`);
       if (res.ok) {
         isReady = true;
-        logger.info(`Kairos Core respondeu health em ${CORE_BASE_URL}`);
+        logger.info(`Kairos Core respondendo em ${CORE_BASE_URL}`);
         return;
       }
     } catch {
       // ainda nao subiu
     }
+    await new Promise((r) => setTimeout(r, 500));
   }
-  logger.warn('Core pode nao ter iniciado completamente (timeout 15s)');
+  logger.warn('Core nao respondeu em 5s - abrindo UI mesmo assim (Core offline)');
 }
 
 export async function stopCore(): Promise<void> {

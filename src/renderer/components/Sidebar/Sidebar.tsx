@@ -3,16 +3,19 @@
  */
 
 import { useChatStore } from '../../store/chat.store.js';
-import { chatApi } from '../../lib/chat-api.js';
 
 export function Sidebar() {
   const conversations = useChatStore((s) => s.conversations);
+  const conversationIds = useChatStore((s) => s.conversationIds);
   const activeId = useChatStore((s) => s.activeId);
   const setActive = useChatStore((s) => s.setActive);
   const newConversation = useChatStore((s) => s.newConversation);
   const deleteConversation = useChatStore((s) => s.deleteConversation);
 
-  const sorted = Array.from(conversations.values()).sort((a, b) => b.updatedAt - a.updatedAt);
+  const sorted = conversationIds
+    .map((id) => conversations[id])
+    .filter(Boolean)
+    .sort((a, b) => b.updatedAt - a.updatedAt);
 
   return (
     <aside className="sidebar">
@@ -39,9 +42,7 @@ export function Sidebar() {
             onClick={() => setActive(conv.id)}
           >
             <div className="conversation-title">{conv.title}</div>
-            <div className="conversation-meta">
-              {conv.messages.length} msgs
-            </div>
+            <div className="conversation-meta">{conv.messages.length} msgs</div>
             <button
               className="conversation-delete"
               onClick={(e) => {
@@ -65,4 +66,3 @@ export function Sidebar() {
   );
 }
 
-void chatApi;
