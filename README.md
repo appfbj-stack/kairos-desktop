@@ -3,6 +3,9 @@
 > **Assistente empresarial inteligente para Windows.**
 > Powered by [OpenSquad](https://github.com/appfbj-stack/opensquad) como motor interno de orquestração de agentes e skills.
 
+🌐 **Site:** [kairosdesktop.fbautomacao.space](https://kairosdesktop.fbautomacao.space)
+📦 **Updates:** [kairosdesktop.fbautomacao.space/downloads](https://kairosdesktop.fbautomacao.space/downloads)
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D20-339933)](https://nodejs.org)
 [![Electron](https://img.shields.io/badge/Electron-33-47848F)](https://www.electronjs.org)

@@ -27,6 +27,7 @@ Toda interação é via interface gráfica (Electron + React).
 | D6 | Telemetria | **Opt-in** com toggle claro | Sem telemetria fica cego, opt-out irrita |
 | D7 | LGPD | **Built-in desde v1** | Não custa no início, evita dor depois |
 | D8 | OpenSquad source | **Fork `appfbj-stack/opensquad` 0.1.15** (vs upstream 0.1.14) | Você já tem customizações no fork |
+| D9 | Domínio público | **`kairosdesktop.fbautomacao.space`** (subdomínio do VPS Dokploy 187.77.229.227) | Servidor de updates, docs, downloads, telemetria, marketplace |
 
 ---
 

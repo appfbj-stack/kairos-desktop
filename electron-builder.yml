@@ -43,5 +43,6 @@ linux:
   category: Office
 publish:
   provider: generic
-  url: https://github.com/appfbj-stack/kairos-desktop/releases/latest
+  url: https://kairosdesktop.fbautomacao.space/downloads
   channel: latest
+  useMultipleRangeRequest: false

@@ -2,6 +2,16 @@
 
 > **Complementa o PRD técnico.** Foco em decisões, diagramas e trade-offs.
 
+**Domínio público:** `kairosdesktop.fbautomacao.space` (VPS Dokploy 187.77.229.227)
+**Sub-recursos:**
+- `/` — Landing page
+- `/docs` — Documentação
+- `/downloads` — Instaladores Windows/Mac/Linux (auto-update)
+- `/api/updates` — Endpoint de versionamento (electron-updater)
+- `/api/telemetry` — Telemetria opt-in
+- `/api/marketplace` — Skills verticais (Fase 9)
+- `/status` — Status público
+
 ---
 
 ## 1. Decisões arquiteturais (ADRs)
