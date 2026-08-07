@@ -1,0 +1,113 @@
+/**
+ * Skill registry - mantém a lista de skills disponíveis e
+ * expõe metadados no formato OpenAI function calling.
+ */
+
+import type { Skill, JsonSchema, SkillResult } from './types.js';
+import { checkSafety } from './safety.js';
+import { fileManagerList, fileManagerRead } from './builtin/file-manager.js';
+import { appLauncherOpen } from './builtin/app-launcher.js';
+import { searchFiles } from './builtin/search.js';
+
+// Re-export para conveniência
+export type { Skill, JsonSchema, SkillResult } from './types.js';
+
+const builtinSkills: Skill[] = [
+  fileManagerList,
+  fileManagerRead,
+  appLauncherOpen,
+  searchFiles,
+];
+
+class SkillRegistry {
+  private skills = new Map<string, Skill>();
+
+  constructor(initial: Skill[] = []) {
+    for (const s of initial) {
+      this.register(s);
+    }
+  }
+
+  register(skill: Skill): void {
+    if (this.skills.has(skill.name)) {
+      throw new Error(`Skill duplicada: ${skill.name}`);
+    }
+    this.skills.set(skill.name, skill);
+  }
+
+  get(name: string): Skill | undefined {
+    return this.skills.get(name);
+  }
+
+  list(): Skill[] {
+    return Array.from(this.skills.values());
+  }
+
+  /**
+   * Retorna as skills no formato ToolDefinition (sem wrapper OpenAI).
+   * O adapter (mapTools) faz o wrapping para OpenAI.
+   */
+  asToolDefinitions(): Skill[] {
+    return this.list().map((s) => ({
+      name: s.name,
+      description: s.description,
+      parameters: s.parameters,
+    }));
+  }
+
+  /**
+   * Mantida por compatibilidade: retorna no formato OpenAI pronto.
+   * Usar asToolDefinitions() se for passar pelo mapTools do adapter.
+   */
+  asOpenAITools(): Array<{
+    type: 'function';
+    function: { name: string; description: string; parameters: JsonSchema };
+  }> {
+    return this.list().map((s) => ({
+      type: 'function' as const,
+      function: {
+        name: s.name,
+        description: s.description,
+        parameters: s.parameters,
+      },
+    }));
+  }
+
+  /**
+   * Executa uma skill pelo nome. Retorna erro estruturado
+   * se a skill não existe OU se a safety check falhou.
+   */
+  async execute(
+    name: string,
+    args: Record<string, unknown>,
+    ctx: { cwd?: string } = {},
+  ): Promise<{ ok: true; content: string; data?: unknown } | { ok: false; error: string }> {
+    const skill = this.skills.get(name);
+    if (!skill) {
+      return { ok: false, error: `Skill nao encontrada: ${name}` };
+    }
+
+    // Validação basica dos args (required check)
+    const required = skill.parameters.required || [];
+    for (const key of required) {
+      if (!(key in args)) {
+        return { ok: false, error: `Argumento obrigatorio faltando: ${key}` };
+      }
+    }
+
+    // Safety check no script (se a skill expuser)
+    const safetyKey = (skill as any).safetyCheck as string | undefined;
+    if (safetyKey && !checkSafety(safetyKey).safe) {
+      return { ok: false, error: `Safety: ${checkSafety(safetyKey).reason}` };
+    }
+
+    try {
+      const result = await skill.execute(args, ctx);
+      return { ok: true, content: result.content, data: result.data };
+    } catch (err) {
+      return { ok: false, error: `Erro executando ${name}: ${(err as Error).message}` };
+    }
+  }
+}
+
+export const skillRegistry = new SkillRegistry(builtinSkills);

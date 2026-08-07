@@ -52,9 +52,10 @@ export interface ToolCall {
 }
 
 export interface InvokeChunk {
-  type: 'content' | 'tool_call' | 'done' | 'error';
+  type: 'content' | 'tool_call' | 'tool_result' | 'done' | 'error';
   content?: string;
   toolCall?: ToolCall;
+  toolResult?: { name: string; content: string; ok: boolean };
   error?: string;
   usage?: {
     inputTokens: number;

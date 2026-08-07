@@ -177,6 +177,9 @@ async function* streamOpenAIResponse(
   const decoder = new TextDecoder();
   let buffer = '';
   let usage: { inputTokens: number; outputTokens: number } | undefined;
+  // Buffer de tool calls por index (streaming vem em pedacos - id no primeiro,
+  // arguments em chunks subsequentes que precisam ser concatenados).
+  const toolCallBuffer = new Map<number, { id: string; name: string; argsJson: string }>();
 
   try {
     while (true) {
@@ -192,6 +195,17 @@ async function* streamOpenAIResponse(
         if (!trimmed || !trimmed.startsWith('data:')) continue;
         const data = trimmed.slice(5).trim();
         if (data === '[DONE]') {
+          // Emite tool calls completos (com id/name/args agregados)
+          for (const [, tc] of toolCallBuffer) {
+            yield {
+              type: 'tool_call',
+              toolCall: {
+                id: tc.id,
+                name: tc.name,
+                arguments: tc.argsJson ? safeJsonParse(tc.argsJson) : {},
+              },
+            };
+          }
           yield { type: 'done', usage };
           return;
         }
@@ -215,19 +229,39 @@ async function* streamOpenAIResponse(
             yield transformChunk ? transformChunk(parsed) || c : c;
           }
 
-          // Tool call delta
+          // Tool call delta - agrega por index
           if (choice.delta?.tool_calls) {
             for (const tc of choice.delta.tool_calls) {
-              const chunk: InvokeChunk = {
+              const idx = typeof tc.index === 'number' ? tc.index : 0;
+              let entry = toolCallBuffer.get(idx);
+              if (!entry) {
+                entry = { id: '', name: '', argsJson: '' };
+                toolCallBuffer.set(idx, entry);
+              }
+              if (tc.id) entry.id = tc.id;
+              if (tc.function?.name) entry.name = tc.function.name;
+              if (tc.function?.arguments) {
+                // arguments vem como string parcial - concatenar
+                entry.argsJson += tc.function.arguments;
+              }
+            }
+          }
+
+          // Quando o delta traz finish_reason e ha tool_calls pendentes,
+          // emite o tool_call completo (alguns provedores mandam finish_reason
+          // ANTES do [DONE], e nao podemos esperar ate la).
+          if (choice.finish_reason && toolCallBuffer.size > 0) {
+            for (const [, tc] of toolCallBuffer) {
+              yield {
                 type: 'tool_call',
                 toolCall: {
-                  id: tc.id || '',
-                  name: tc.function?.name || '',
-                  arguments: tc.function?.arguments ? safeJsonParse(tc.function.arguments) : {},
+                  id: tc.id,
+                  name: tc.name,
+                  arguments: tc.argsJson ? safeJsonParse(tc.argsJson) : {},
                 },
               };
-              yield transformChunk ? transformChunk(parsed) || chunk : chunk;
             }
+            toolCallBuffer.clear();
           }
         } catch {
           // ignora chunks malformados

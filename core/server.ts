@@ -22,6 +22,7 @@ import { searchEntitiesUseCase, SearchEntitiesInputSchema } from './application/
 import { recallEntitiesUseCase } from './application/memory/recall-entities.usecase.js';
 import { createConversationUseCase, addMessageUseCase, listConversationsUseCase, listMessagesUseCase, CreateConversationInputSchema, AddMessageInputSchema } from './application/memory/conversation.usecase.js';
 import { getMemoryRepository } from './infrastructure/memory/sqlite.repository.js';
+import { skillRegistry } from './skills/registry.js';
 import { z } from 'zod';
 import type { ChatMessage, ToolDefinition } from './infrastructure/llm/llm-provider.interface.js';
 
@@ -146,14 +147,63 @@ export async function buildServer(): Promise<FastifyInstance> {
   });
 
   // ---------- Chat (sync, sem streaming) ----------
-  app.post<{ Body: z.infer<typeof ChatInputSchema> }>('/chat/sync', async (req, reply) => {
-    const parse = ChatInputSchema.safeParse(req.body);
+  // Aceita opcionalmente `useTools: true` para habilitar function calling.
+  // Quando useTools=true, o Core executa o tool loop e retorna toolCalls + toolResults.
+  const ChatSyncSchema = ChatInputSchema.extend({
+    useTools: z.boolean().optional().default(false),
+  });
+
+  app.post<{ Body: z.infer<typeof ChatSyncSchema> }>('/chat/sync', async (req, reply) => {
+    const parse = ChatSyncSchema.safeParse(req.body);
     if (!parse.success) {
       return reply.code(400).send({ error: 'Invalid input', details: parse.error.flatten() });
     }
     const input = parse.data;
 
     try {
+      // Se useTools=true, injeta tools do registry (formato ToolDefinition,
+      // o adapter mapTools faz o wrapping OpenAI)
+      const tools = input.useTools ? skillRegistry.asToolDefinitions() : input.tools;
+
+      if (input.useTools) {
+        // Tool loop (consome o stream e retorna tudo no final)
+        const stream = invokeLLMUseCase.executeWithTools({
+          messages: input.messages as ChatMessage[],
+          tools: tools as ToolDefinition[] | undefined,
+          provider: input.provider,
+          model: input.model,
+          systemPrompt: input.systemPrompt,
+          temperature: input.temperature,
+          maxTokens: input.maxTokens,
+        });
+
+        let content = '';
+        const toolCalls: Array<{ id: string; name: string; arguments: Record<string, unknown> }> = [];
+        const toolResults: Array<{ name: string; content: string; ok: boolean }> = [];
+
+        for await (const chunk of stream) {
+          if (chunk.type === 'content' && chunk.content) {
+            content += chunk.content;
+          } else if (chunk.type === 'tool_call' && chunk.toolCall) {
+            toolCalls.push(chunk.toolCall);
+          } else if ((chunk.type as string) === 'tool_result' && chunk.toolResult) {
+            toolResults.push(chunk.toolResult);
+          } else if (chunk.type === 'error') {
+            return reply.code(500).send({ error: chunk.error });
+          }
+        }
+
+        return {
+          provider: input.provider || 'openrouter',
+          model: input.model || 'unknown',
+          content,
+          toolCalls,
+          toolResults,
+          usedTools: true,
+        };
+      }
+
+      // Sem tools: fluxo original
       const result = await invokeLLMUseCase.execute({
         messages: input.messages as ChatMessage[],
         tools: input.tools as ToolDefinition[] | undefined,
@@ -176,11 +226,25 @@ export async function buildServer(): Promise<FastifyInstance> {
         model: result.model,
         content,
         toolCalls,
+        usedTools: false,
       };
     } catch (err) {
       app.log.error({ err }, 'chat/sync error');
       return reply.code(500).send({ error: (err as Error).message });
     }
+  });
+
+  // ---------- Skills registry (listagem para o renderer) ----------
+  app.get('/skills/list', async () => {
+    return {
+      skills: skillRegistry.list().map((s) => ({
+        name: s.name,
+        description: s.description,
+        category: s.category,
+        parameters: s.parameters,
+      })),
+      count: skillRegistry.list().length,
+    };
   });
 
   // =====================================================

@@ -64,7 +64,7 @@ export function ChatPanel() {
     addMessage(convId, { id: assistantId, role: 'assistant', content: '', streaming: true });
     setStreaming(true);
 
-    let systemPrompt = 'Voce eh o Kairos, um assistente de IA para Windows. Responda em portugues do Brasil.';
+    let systemPrompt = 'Voce eh o Kairos, um assistente de IA para Windows. Responda em portugues do Brasil. Voce tem acesso a tools do Windows (listar arquivos, ler arquivos, abrir apps, buscar arquivos). Use-as quando o usuario pedir algo do PC.';
     try {
       const recalled = await chatApi.recall(text, 3);
       if (recalled.context) {
@@ -82,10 +82,19 @@ export function ChatPanel() {
         provider: 'openrouter',
         model,
         maxTokens: 600,
+        useTools: true, // Phase 4: habilita function calling
       })) {
         if (chunk.type === 'content' && chunk.content) {
           fullContent += chunk.content;
           appendToMessage(convId, assistantId, chunk.content);
+        } else if (chunk.type === 'tool_call' && chunk.toolCall) {
+          // Mostra tool call como texto formatado
+          const args = JSON.stringify(chunk.toolCall.arguments || {});
+          appendToMessage(convId, assistantId, `\n\n🤖 **Chamando \`${chunk.toolCall.name}\`** \`${args}\`\n`);
+        } else if (chunk.type === 'tool_result' && chunk.toolResult) {
+          // Mostra tool result
+          const icon = chunk.toolResult.ok ? '✅' : '❌';
+          appendToMessage(convId, assistantId, `\n${icon} **Resultado**:\n\`\`\`\n${chunk.toolResult.content}\n\`\`\`\n`);
         } else if (chunk.type === 'error') {
           appendToMessage(convId, assistantId, `\n\n_Erro: ${chunk.error}_`);
         }

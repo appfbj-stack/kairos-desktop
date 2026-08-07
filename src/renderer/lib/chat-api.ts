@@ -19,12 +19,15 @@ export interface ChatInput {
   systemPrompt?: string;
   temperature?: number;
   maxTokens?: number;
+  /** Phase 4: habilita function calling (tool loop no Core) */
+  useTools?: boolean;
 }
 
 export interface ChatChunk {
-  type: 'content' | 'tool_call' | 'done' | 'error';
+  type: 'content' | 'tool_call' | 'tool_result' | 'done' | 'error';
   content?: string;
-  toolCall?: { name: string; arguments: unknown };
+  toolCall?: { id?: string; name: string; arguments?: unknown };
+  toolResult?: { name: string; content: string; ok: boolean };
   error?: string;
 }
 
@@ -94,12 +97,22 @@ export const chatApi = {
     }
 
     const text: string = result.content || result.message || '';
+    const toolCalls = result.toolCalls || [];
+    const toolResults = result.toolResults || [];
+
+    // Primeiro: emite tool calls e results (transparencia)
+    for (const tc of toolCalls) {
+      yield { type: 'tool_call', toolCall: tc };
+    }
+    for (const tr of toolResults) {
+      yield { type: 'tool_result', content: tr.content, toolResult: tr } as any;
+    }
+
+    // Depois: chunka o content final
     if (text) {
-      // Simula streaming chunk a chunk para manter efeito "digitando"
       const CHUNK_SIZE = 5;
       for (let i = 0; i < text.length; i += CHUNK_SIZE) {
         yield { type: 'content', content: text.slice(i, i + CHUNK_SIZE) };
-        // Pausa proporcional para parecer digitacao natural
         await new Promise((r) => setTimeout(r, 22));
       }
     } else {

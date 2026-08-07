@@ -65,6 +65,16 @@ export const kairosCore = {
 
   chatSync: (input: any) => fetchJson('/chat/sync', { method: 'POST', body: JSON.stringify(input) }),
 
+  listAllSkills: async () => {
+    try {
+      const res = await fetch(`${CORE_BASE_URL}/skills/list`);
+      if (!res.ok) return { skills: [], count: 0 };
+      return await res.json();
+    } catch {
+      return { skills: [], count: 0 };
+    }
+  },
+
   cancelChat: async (_id: string) => ({ cancelled: true }),
 
   getHistory: async (_id: string) => ({ messages: [] }),

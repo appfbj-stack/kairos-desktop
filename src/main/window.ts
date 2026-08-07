@@ -85,6 +85,18 @@ ipcMain.handle('chat:send', async (_event, payload) => {
   return kairosCore.chatSync(payload);
 });
 
+// IPC handler para listar skills (passa direto pro Core)
+ipcMain.handle('skills:list-all', async () => {
+  try {
+    const res = await fetch(`${kairosCore.getCoreUrl?.() || 'http://127.0.0.1:4096'}/skills/list`);
+    if (!res.ok) return { skills: [], count: 0 };
+    return await res.json();
+  } catch (err) {
+    logger.error({ err }, 'skills:list-all error');
+    return { skills: [], count: 0, error: (err as Error).message };
+  }
+});
+
 ipcMain.handle('chat:cancel', async (_event, conversationId: string) => {
   return kairosCore.cancelChat(conversationId);
 });
