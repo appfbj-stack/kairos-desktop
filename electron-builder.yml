@@ -1,0 +1,47 @@
+appId: com.kairos.desktop
+productName: Kairos Desktop AI
+copyright: Copyright (c) 2026 Fernando Borges
+directories:
+  output: release/${version}
+  buildResources: resources
+files:
+  - dist/**/*
+  - core/**/*
+  - opensquad/_runtime/**/*
+  - skills/**/*
+  - package.json
+  - "!**/*.map"
+  - "!**/*.ts"
+  - "!**/.DS_Store"
+asar: true
+asarUnpack:
+  - "**/node_modules/better-sqlite3/**/*"
+  - "**/opensquad/_runtime/**/*"
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  artifactName: ${productName}-${version}-Setup.${ext}
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Kairos Desktop AI
+mac:
+  target:
+    - target: dmg
+      arch:
+        - arm64
+        - x64
+  category: public.app-category.productivity
+linux:
+  target:
+    - AppImage
+  category: Office
+publish:
+  provider: generic
+  url: https://github.com/appfbj-stack/kairos-desktop/releases/latest
+  channel: latest

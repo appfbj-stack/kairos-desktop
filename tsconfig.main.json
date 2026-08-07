@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022"],
+    "outDir": "dist/main",
+    "rootDir": "src/main",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "sourceMap": true,
+    "declaration": false,
+    "baseUrl": ".",
+    "paths": {
+      "@core/*": ["core/*"],
+      "@shared/*": ["src/shared/*"]
+    }
+  },
+  "include": ["src/main/**/*", "src/shared/**/*", "core/**/*"],
+  "exclude": ["node_modules", "dist"]
+}
