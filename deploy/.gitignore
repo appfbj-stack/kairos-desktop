@@ -1,0 +1,6 @@
+# Downloads publicados (binarios pesados - gerados em runtime)
+update-server/downloads/
+
+# Logs
+*.log
+logs/

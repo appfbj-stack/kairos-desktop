@@ -1,0 +1,38 @@
+# Caddyfile para kairosdesktop.fbautomacao.space
+#
+# Este arquivo eh uma referencia. O Dokploy ja gerencia Caddy nativamente
+# via Traefik ou similar. Use este config se preferir proxy interno.
+#
+# SSL via wildcard ja configurado para *.fbautomacao.space no VPS principal.
+
+kairosdesktop.fbautomacao.space {
+    # Health check
+    handle /health {
+        reverse_proxy update-server:4097
+    }
+
+    # Update server (instaladores + API)
+    handle /downloads/* {
+        reverse_proxy update-server:4097
+    }
+    handle /api/updates/* {
+        reverse_proxy update-server:4097
+    }
+
+    # Landing page (placeholder - sera adicionado na Fase X)
+    handle / {
+        respond "Kairos Desktop AI - Site em construcao" 200
+        header Content-Type text/html
+    }
+}
+
+# Logs estruturados
+{
+    log {
+        output file /var/log/caddy/kairos.log {
+            roll_size 100mb
+            roll_keep 5
+        }
+        level INFO
+    }
+}

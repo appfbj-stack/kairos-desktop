@@ -1,0 +1,69 @@
+# Kairos Desktop AI - Docker Compose para Dokploy
+#
+# Roda os servicos de suporte (update server) no VPS Dokploy 187.77.229.227
+# O subdominio kairosdesktop.fbautomacao.space ja tem SSL via Caddy wildcard
+#
+# Para fazer deploy:
+#   1. No Dokploy UI, criar nova aplicacao
+#   2. Apontar para este repositorio (branch main)
+#   3. Apontar para este docker-compose.yml
+#   4. Configurar dominio kairosdesktop.fbautomacao.space
+#   5. (Opcional) Subir tambem docs/landing como servicos separados
+
+version: '3.8'
+
+services:
+  update-server:
+    build:
+      context: ./update-server
+      dockerfile: Dockerfile
+    image: kairos-update-server:latest
+    container_name: kairos-update-server
+    restart: unless-stopped
+    ports:
+      - "4097:4097"
+    environment:
+      - NODE_ENV=production
+      - PORT=4097
+      - HOST=0.0.0.0
+      - KAIROS_PUBLIC_URL=https://kairosdesktop.fbautomacao.space
+      - LOG_LEVEL=info
+    volumes:
+      - update-downloads:/app/downloads
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4097/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - kairos-net
+
+  # Caddy reverse proxy (opcional - Dokploy ja tem Caddy nativo)
+  # Descomente se preferir proxy interno
+  # caddy:
+  #   image: caddy:2-alpine
+  #   container_name: kairos-caddy
+  #   restart: unless-stopped
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   volumes:
+  #     - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+  #     - caddy_data:/data
+  #     - caddy_config:/config
+  #   networks:
+  #     - kairos-net
+  #   depends_on:
+  #     - update-server
+
+volumes:
+  update-downloads:
+    name: kairos-update-downloads
+  # caddy_data:
+  # caddy_config:
+
+networks:
+  kairos-net:
+    name: kairos-net
+    driver: bridge
