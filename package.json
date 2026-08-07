@@ -38,7 +38,6 @@
     "test": "node --test tests/**/*.test.ts",
     "test:openrouter": "tsc -p tests/tsconfig.test.json && copy-item -Force core/infrastructure/memory/migrations/*.sql .test-build/core/infrastructure/memory/migrations/ && node --env-file=.env .test-build/tests/integration/test-openrouter.js",
     "test:memory": "tsc -p tests/tsconfig.test.json && copy-item -Force core/infrastructure/memory/migrations/*.sql .test-build/core/infrastructure/memory/migrations/ && node .test-build/tests/integration/test-memory.js",
-    "test:memory": "npm run test:memory -w kairos-core",
     "kairos:init": "node scripts/kairos-init.mjs"
   },
   "dependencies": {

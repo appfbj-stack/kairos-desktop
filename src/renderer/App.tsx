@@ -1,16 +1,18 @@
 /**
- * App root - layout principal com sidebar + chat.
- * Implementacao minima (Fase 3). Evolui nas fases seguintes.
+ * App root - layout principal com Sidebar + ChatPanel.
  */
 
-import { ChatPanel } from './components/Chat/ChatPanel.js';
 import { Sidebar } from './components/Sidebar/Sidebar.js';
+import { ChatPanel } from './components/Chat/ChatPanel.js';
+import { useChatStore } from './store/chat.store.js';
 
 export function App() {
+  const sidebarOpen = useChatStore((s) => s.sidebarOpen);
+
   return (
-    <div className="kairos-app">
+    <div className="app-shell">
       <Sidebar />
-      <main className="kairos-main">
+      <main className="app-main">
         <ChatPanel />
       </main>
     </div>
