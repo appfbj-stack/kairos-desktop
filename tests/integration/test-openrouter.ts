@@ -68,8 +68,8 @@ async function main() {
       messages: [
         { role: 'user', content: 'Responda em uma frase: o que e o Kairos Desktop AI?' },
       ],
-      model: 'openai/gpt-4o-mini',
-      maxTokens: 100,
+      model: 'openai/gpt-oss-20b:free',
+      maxTokens: 300,
     });
 
     for await (const chunk of result.stream) {
@@ -90,15 +90,15 @@ async function main() {
     check('Chat streaming executou', false, (err as Error).message);
   }
 
-  // 4. Tools (function calling)
+  // 4. Tools (function calling) - usa modelo que suporta tools
   console.log('\n4. Tool calling:');
   try {
     const result = await invokeLLMUseCase.execute({
       messages: [
         { role: 'user', content: 'Qual o clima em Tokyo agora?' },
       ],
-      model: 'openai/gpt-4o-mini',
-      maxTokens: 200,
+      model: 'openai/gpt-oss-20b:free',
+      maxTokens: 300,
       tools: [
         {
           name: 'get_weather',

@@ -22,8 +22,8 @@ export interface LLMRouterConfig {
 
 export const DEFAULT_ROUTER_CONFIG: LLMRouterConfig = {
   defaultProvider: process.env.KAIROS_DEFAULT_PROVIDER || 'openrouter',
-  defaultModel: process.env.KAIROS_DEFAULT_MODEL || 'openai/gpt-4o-mini',
-  fallbackChain: ['openrouter', 'openai', 'ollama', 'anthropic'],
+  defaultModel: process.env.KAIROS_DEFAULT_MODEL || 'openai/gpt-oss-20b:free',
+  fallbackChain: ['openrouter', 'ollama', 'openai', 'anthropic'],
 };
 
 const PROVIDERS: Record<string, LLMProvider> = {

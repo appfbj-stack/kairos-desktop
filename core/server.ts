@@ -17,6 +17,11 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import { invokeLLMUseCase } from './application/llm/invoke-llm.usecase.js';
 import { listProvidersUseCase } from './application/llm/select-model.usecase.js';
+import { storeEntityUseCase, StoreEntityInputSchema } from './application/memory/store-entity.usecase.js';
+import { searchEntitiesUseCase, SearchEntitiesInputSchema } from './application/memory/search-entities.usecase.js';
+import { recallEntitiesUseCase } from './application/memory/recall-entities.usecase.js';
+import { createConversationUseCase, addMessageUseCase, listConversationsUseCase, listMessagesUseCase, CreateConversationInputSchema, AddMessageInputSchema } from './application/memory/conversation.usecase.js';
+import { getMemoryRepository } from './infrastructure/memory/sqlite.repository.js';
 import { z } from 'zod';
 import type { ChatMessage, ToolDefinition } from './infrastructure/llm/llm-provider.interface.js';
 
@@ -176,6 +181,110 @@ export async function buildServer(): Promise<FastifyInstance> {
       app.log.error({ err }, 'chat/sync error');
       return reply.code(500).send({ error: (err as Error).message });
     }
+  });
+
+  // =====================================================
+  // MEMORY ENDPOINTS (Fase 2)
+  // =====================================================
+
+  // ---------- Entities (Nivel Empresa) ----------
+  app.post('/memory/entities', async (req, reply) => {
+    const parse = StoreEntityInputSchema.safeParse(req.body);
+    if (!parse.success) {
+      return reply.code(400).send({ error: 'Invalid input', details: parse.error.flatten() });
+    }
+    try {
+      const entity = await storeEntityUseCase.execute(parse.data);
+      return entity;
+    } catch (err) {
+      app.log.error({ err }, 'store entity error');
+      return reply.code(500).send({ error: (err as Error).message });
+    }
+  });
+
+  app.get<{ Querystring: { q?: string; type?: string; tag?: string; limit?: string } }>(
+    '/memory/entities',
+    async (req, reply) => {
+      const parse = SearchEntitiesInputSchema.safeParse({
+        query: req.query.q,
+        type: req.query.type,
+        tag: req.query.tag,
+        limit: req.query.limit ? Number(req.query.limit) : 20,
+      });
+      if (!parse.success) {
+        return reply.code(400).send({ error: 'Invalid input', details: parse.error.flatten() });
+      }
+      const results = await searchEntitiesUseCase.execute(parse.data);
+      return { entities: results, total: results.length };
+    },
+  );
+
+  app.get<{ Params: { slug: string } }>('/memory/entities/:slug', async (req, reply) => {
+    const repo = getMemoryRepository();
+    const entity = repo.getEntityBySlug(req.params.slug);
+    if (!entity) return reply.code(404).send({ error: 'Not found' });
+    return entity;
+  });
+
+  // Recall (usado pelo LLM)
+  app.post<{ Body: { query: string; type?: string; limit?: number } }>(
+    '/memory/recall',
+    async (req, reply) => {
+      try {
+        const result = await recallEntitiesUseCase.execute({
+          query: req.body.query,
+          type: req.body.type as any,
+          limit: req.body.limit || 5,
+        });
+        return result;
+      } catch (err) {
+        app.log.error({ err }, 'recall error');
+        return reply.code(500).send({ error: (err as Error).message });
+      }
+    },
+  );
+
+  // ---------- Conversations (Nivel Usuario) ----------
+  app.post('/memory/conversations', async (req, reply) => {
+    const parse = CreateConversationInputSchema.safeParse(req.body || {});
+    if (!parse.success) {
+      return reply.code(400).send({ error: 'Invalid input', details: parse.error.flatten() });
+    }
+    return createConversationUseCase.execute(parse.data);
+  });
+
+  app.get<{ Querystring: { limit?: string } }>('/memory/conversations', async (req) => {
+    const limit = req.query.limit ? Number(req.query.limit) : 50;
+    const list = await listConversationsUseCase.execute(limit);
+    return { conversations: list, total: list.length };
+  });
+
+  app.get<{ Params: { id: string }; Querystring: { limit?: string } }>(
+    '/memory/conversations/:id/messages',
+    async (req) => {
+      const limit = req.query.limit ? Number(req.query.limit) : 200;
+      const messages = await listMessagesUseCase.execute(req.params.id, limit);
+      return { messages, total: messages.length };
+    },
+  );
+
+  app.post('/memory/conversations/:id/messages', async (req, reply) => {
+    const parse = AddMessageInputSchema.safeParse({ ...req.body, conversationId: req.params.id });
+    if (!parse.success) {
+      return reply.code(400).send({ error: 'Invalid input', details: parse.error.flatten() });
+    }
+    return addMessageUseCase.execute(parse.data);
+  });
+
+  // ---------- LGPD ----------
+  app.get('/memory/export', async () => {
+    return getMemoryRepository().exportAll();
+  });
+
+  app.delete('/memory/all', async (req, reply) => {
+    // TODO: requer confirmacao + audit log
+    getMemoryRepository().deleteAll();
+    return { deleted: true, ts: Date.now() };
   });
 
   return app;

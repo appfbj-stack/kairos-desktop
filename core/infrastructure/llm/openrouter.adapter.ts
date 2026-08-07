@@ -39,8 +39,11 @@ export const openRouterAdapter: LLMProvider = createOpenAICompatibleAdapter({
     { id: 'meta-llama/llama-3.1-70b-instruct', displayName: 'Meta Llama 3.1 70B', contextWindow: 131_072, supportsTools: true, supportsVision: false, inputCostPerMTokens: 0.59, outputCostPerMTokens: 0.79 },
     // Mistral
     { id: 'mistralai/mistral-large', displayName: 'Mistral Large', contextWindow: 128_000, supportsTools: true, supportsVision: false, inputCostPerMTokens: 2, outputCostPerMTokens: 6 },
-    // Free tier
-    { id: 'meta-llama/llama-3.3-70b-instruct:free', displayName: 'Llama 3.3 70B (free)', contextWindow: 131_072, supportsTools: true, supportsVision: false, inputCostPerMTokens: 0, outputCostPerMTokens: 0 },
-    { id: 'google/gemini-2.0-flash-exp:free', displayName: 'Gemini 2.0 Flash (free)', contextWindow: 1_000_000, supportsTools: true, supportsVision: true, inputCostPerMTokens: 0, outputCostPerMTokens: 0 },
+    // Free tier (atualizado em 2026-08-07)
+    { id: 'openai/gpt-oss-20b:free', displayName: 'OpenAI gpt-oss-20B (free)', contextWindow: 131_072, supportsTools: true, supportsVision: false, inputCostPerMTokens: 0, outputCostPerMTokens: 0 },
+    { id: 'google/gemma-4-31b-it:free', displayName: 'Google Gemma 4 31B (free)', contextWindow: 262_144, supportsTools: true, supportsVision: false, inputCostPerMTokens: 0, outputCostPerMTokens: 0 },
+    { id: 'google/gemma-4-26b-a4b-it:free', displayName: 'Google Gemma 4 26B (free)', contextWindow: 262_144, supportsTools: true, supportsVision: false, inputCostPerMTokens: 0, outputCostPerMTokens: 0 },
+    { id: 'nvidia/nemotron-3-ultra-550b-a55b:free', displayName: 'NVIDIA Nemotron-3 550B (free)', contextWindow: 1_000_000, supportsTools: true, supportsVision: false, inputCostPerMTokens: 0, outputCostPerMTokens: 0 },
+    { id: 'nvidia/nemotron-3-super-120b-a12b:free', displayName: 'NVIDIA Nemotron-3 120B (free)', contextWindow: 262_144, supportsTools: true, supportsVision: false, inputCostPerMTokens: 0, outputCostPerMTokens: 0 },
   ],
 });
