@@ -48,10 +48,6 @@ await fastify.register(fastifyStatic, {
   root: DOWNLOADS_DIR,
   prefix: '/downloads/',
   decorateReply: false,
-  setHeaders: (res, path) => {
-    // Bloqueia listagem de diretorio
-    if (path.endsWith('/')) res.status(403).end();
-  },
 });
 
 /**
