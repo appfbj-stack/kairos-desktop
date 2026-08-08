@@ -22,7 +22,7 @@ export interface LLMRouterConfig {
 
 export const DEFAULT_ROUTER_CONFIG: LLMRouterConfig = {
   defaultProvider: process.env.KAIROS_DEFAULT_PROVIDER || 'openrouter',
-  defaultModel: process.env.KAIROS_DEFAULT_MODEL || 'openai/gpt-oss-20b:free',
+  defaultModel: process.env.KAIROS_DEFAULT_MODEL || 'nvidia/nemotron-3-super-120b-a12b:free',
   fallbackChain: ['openrouter', 'ollama', 'openai', 'anthropic'],
 };
 

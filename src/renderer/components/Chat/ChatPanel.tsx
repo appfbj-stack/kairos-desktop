@@ -35,7 +35,7 @@ export function ChatPanel() {
   const newConversation = useChatStore((s) => s.newConversation);
 
   const [input, setInput] = useState('');
-  const [model, setModel] = useState('openai/gpt-oss-20b:free');
+  const [model, setModel] = useState('nvidia/nemotron-3-super-120b-a12b:free');
   const [coreStatus, setCoreStatus] = useState<'checking' | 'online' | 'offline'>('checking');
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -226,10 +226,10 @@ export function ChatPanel() {
             {coreStatus === 'online' ? '● online' : coreStatus === 'offline' ? '○ offline' : '⟳ verificando'}
           </span>
           <select value={model} onChange={(e) => setModel(e.target.value)} className="model-select">
-            <option value="openai/gpt-oss-20b:free">gpt-oss-20b (free)</option>
-            <option value="google/gemma-4-31b-it:free">gemma-4-31b (free)</option>
-            <option value="nvidia/nemotron-3-super-120b-a12b:free">nemotron-3-super (free)</option>
+            <option value="nvidia/nemotron-3-super-120b-a12b:free">nemotron-3-super (free, rapido)</option>
             <option value="meta-llama/llama-3.3-70b-instruct:free">llama-3.3-70b (free)</option>
+            <option value="openai/gpt-oss-20b:free">gpt-oss-20b (free, lento)</option>
+            <option value="google/gemma-4-31b-it:free">gemma-4-31b (free, pode cair)</option>
             <option value="google/gemini-2.0-flash-exp:free">gemini-2.0-flash (vision)</option>
             <option value="qwen/qwen-2-vl-72b-instruct">qwen-2-vl-72b (vision, paid)</option>
           </select>
