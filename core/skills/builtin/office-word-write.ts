@@ -1,26 +1,40 @@
 /**
- * office_word_write - preenche um template Word com placeholders {{chave}}.
+ * office_word_write - preenche um template Word com placeholders {{chave}} (pure-Node).
  *
- * Operacoes:
- *  - fill_template: copia o template, faz Find/Replace em {{chave}} -> valor, salva no output.
- *    Aceita replacements como objeto {chave: valor} ou como array [{find, replace}].
+ * NAO requer Microsoft Word instalado.
  *
- * Requer Microsoft Word instalado (interop COM).
- * Mantem formatacao original do template (apenas troca o texto dos placeholders).
+ * Como funciona:
+ *  1. Le o template com mammoth (extrai texto, paragrafos)
+ *  2. Faz Find/Replace em {{chave}} -> valor no texto
+ *  3. Gera novo .docx com a lib `docx` usando o texto preenchido
+ *
+ * Tradeoff: a formatacao original do template (fontes custom, cores, etc) NAO e
+ * preservada (porque mammoth extrai texto puro). O documento gerado tem formatacao
+ * padrao (titulo bold 16pt, corpo regular 11pt).
+ *
+ * Para 95% dos casos (cartas, recibos, atas) isso e mais que suficiente.
  */
 
 import type { Skill } from '../types.js';
-import { execPowerShell, escapePsString } from '../powershell.js';
+import mammoth from 'mammoth';
+import {
+  Document,
+  Packer,
+  Paragraph,
+  TextRun,
+  HeadingLevel,
+  AlignmentType,
+} from 'docx';
 
 export const officeWordWrite: Skill = {
   name: 'office_word_write',
   description:
     'Preenche um template Word (.docx) com placeholders no formato {{chave}}. ' +
-    'Copia o template, substitui cada {{chave}} pelo valor correspondente e salva em outputPath. ' +
+    'Cria novo documento substituindo cada {{chave}} pelo valor correspondente. ' +
+    'NAO requer Microsoft Word instalado. ' +
     'Aceita replacements como objeto {nome: "Joao", valor: "500", data: "01/01/2026"}. ' +
-    'Mantem formatacao original (fontes, paragrafos, estilos). ' +
     'Use para gerar cartas, contratos, recibos, declaracoes a partir de templates. ' +
-    'Requer Microsoft Word instalado.',
+    'ATENCAO: formatacao original do template NAO e preservada (texto com formatacao padrao).',
   category: 'office',
   parameters: {
     type: 'object',
@@ -38,6 +52,10 @@ export const officeWordWrite: Skill = {
         description:
           'Objeto com os placeholders a substituir. Ex: {"nome": "Joao", "valor": "R$ 500", "data": "01/01/2026"}.',
       },
+      title: {
+        type: 'string',
+        description: 'Titulo do documento (opcional, primeira linha em negrito). Se omitido, primeira linha do template vira titulo.',
+      },
     },
     required: ['templatePath', 'outputPath', 'replacements'],
   },
@@ -45,6 +63,7 @@ export const officeWordWrite: Skill = {
     const templatePath = String(args.templatePath || '').trim();
     const outputPath = String(args.outputPath || '').trim();
     const replacements = args.replacements;
+    const title = args.title ? String(args.title) : '';
 
     if (!templatePath) return { content: 'Erro: templatePath vazio', error: true };
     if (!outputPath) return { content: 'Erro: outputPath vazio', error: true };
@@ -57,117 +76,75 @@ export const officeWordWrite: Skill = {
       return { content: 'Erro: replacements vazio (nada para substituir)', error: true };
     }
 
-    const safeTemplate = escapePsString(templatePath);
-    const safeOutput = escapePsString(outputPath);
-
-    // Construir hashtable PS @{
-    const psHash =
-      '@{' +
-      entries
-        .map(([k, v]) => {
-          const valueStr = typeof v === 'string' ? `"${escapePsString(v)}"` : String(v);
-          return `"${escapePsString(k)}" = ${valueStr}`;
-        })
-        .join('; ') +
-      '}';
-
-    // Construir array de pares [find, replace] pros Find/Replace
-    // Cada par vira uma hashtable PS @{find="..."; replace="..."}
-    const pairs = entries.map(([k, v]) => {
-      const find = escapePsString(`{{${k}}}`);
-      const valueStr = typeof v === 'string' ? `"${escapePsString(v)}"` : String(v);
-      return `@{ find = "${find}"; replace = ${valueStr} }`;
-    });
-    const psPairs = '@(' + pairs.join('; ') + ')';
-
-    const script = `
-$ErrorActionPreference = 'Stop'
-$word = $null
-$doc = $null
-try {
-  $word = New-Object -ComObject Word.Application -ErrorAction Stop
-  $word.Visible = $false
-  $word.DisplayAlerts = 0
-  $doc = $word.Documents.Open("${safeTemplate}", $false, $true)
-  $replacements = ${psHash}
-  $pairs = ${psPairs}
-  $applied = @()
-
-  foreach ($pair in $pairs) {
-    $findText = $pair.find
-    $replaceText = $pair.replace
-    $find = $doc.Content.Find
-    $find.ClearFormatting()
-    $find.Replacement.ClearFormatting()
-    $find.Text = $findText
-    $find.Replacement.Text = $replaceText
-    $find.Forward = $true
-    $find.Wrap = 1  # wdFindContinue
-    $find.Format = $false
-    $find.MatchCase = $false
-    $find.MatchWholeWord = $false
-    $find.MatchWildcards = $false
-    $find.MatchSoundsLike = $false
-    $find.MatchAllWordForms = $false
-    $executed = $find.Execute($findText, $false, $false, $false, $false, $false, $true, 1, $false, $replaceText, 2)
-    if ($executed) { $applied += @{ find = $findText; replace = $replaceText } }
-  }
-
-  $doc.SaveAs2("${safeOutput}", 16)
-  $doc.Close($false)
-  $word.Quit()
-  return @{
-    output = "${safeOutput}"
-    requestedReplacements = $pairs.Count
-    applied = $applied.Count
-    details = $applied
-  } | ConvertTo-Json -Depth 5 -Compress
-} catch {
-  return @{ error = $_.Exception.Message; line = $_.InvocationInfo.ScriptLineNumber } | ConvertTo-Json -Compress
-} finally {
-  if ($null -ne $doc) { [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($doc) }
-  if ($null -ne $word) {
-    $word.Quit()
-    [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($word)
-  }
-  [GC]::Collect()
-}
-`.trim();
-
-    const result = await execPowerShell(script, { timeoutMs: 60_000 });
-
-    if (result.timedOut) {
-      return {
-        content: 'Erro: timeout preenchendo Word (60s). Arquivo muito grande ou Word nao respondeu.',
-        error: true,
-      };
-    }
-    if (!result.stdout) {
-      return {
-        content: `Erro PowerShell: ${result.stderr || 'sem output (Word instalado?)'}`,
-        error: true,
-      };
-    }
-
     try {
-      const parsed = JSON.parse(result.stdout);
-      if (parsed.error) {
-        return {
-          content: `Erro Word: ${parsed.error}${parsed.line ? ' (linha ' + parsed.line + ')' : ''}`,
-          error: true,
-        };
+      // 1. Le o template com mammoth
+      const result = await mammoth.extractRawText({ path: templatePath });
+      let rawText = result.value || '';
+
+      // 2. Aplica Find/Replace em {{chave}} -> valor
+      let applied = 0;
+      for (const [key, value] of entries) {
+        const placeholder = `{{${key}}}`;
+        const replacementStr = String(value);
+        // Escape regex special chars no placeholder (apenas { e } que sao normais)
+        const regex = new RegExp(placeholder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g');
+        const matches = rawText.match(regex);
+        if (matches) {
+          rawText = rawText.replace(regex, replacementStr);
+          applied += matches.length;
+        }
       }
 
-      const missing = parsed.requestedReplacements - parsed.applied;
-      let msg = `Documento preenchido salvo em: ${parsed.output}\n`;
-      msg += `Substituicoes aplicadas: ${parsed.applied}/${parsed.requestedReplacements}`;
-      if (missing > 0) {
-        msg += `\nAviso: ${missing} placeholder(s) nao encontrados no template. Verifique os nomes (case-insensitive).`;
+      // 3. Quebra em paragrafos (linhas nao-vazias)
+      const lines = rawText.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.length > 0);
+
+      // 4. Constroi o documento
+      const docTitle = title || lines[0] || 'Documento';
+      const bodyLines = title ? lines : lines.slice(1); // remove titulo do body se nao foi fornecido separado
+
+      const children: Paragraph[] = [
+        new Paragraph({
+          heading: HeadingLevel.HEADING_1,
+          alignment: AlignmentType.CENTER,
+          children: [
+            new TextRun({ text: docTitle, bold: true, size: 32 }), // 16pt
+          ],
+        }),
+        new Paragraph({ text: '' }), // espaco
+      ];
+
+      for (const line of bodyLines) {
+        children.push(
+          new Paragraph({
+            spacing: { after: 200 },
+            children: [new TextRun({ text: line, size: 22 })], // 11pt
+          })
+        );
       }
-      return { content: msg, data: parsed };
+
+      const doc = new Document({
+        creator: 'Kairos',
+        title: docTitle,
+        sections: [{ properties: {}, children }],
+      });
+
+      // 5. Serializa pra buffer e salva
+      const buffer = await Packer.toBuffer(doc);
+      const fs = await import('node:fs/promises');
+      await fs.writeFile(outputPath, buffer);
+
+      const requested = entries.length;
+
+      let msg = `Documento preenchido salvo em: ${outputPath}\n`;
+      msg += `Placeholders solicitados: ${requested}\n`;
+      msg += `Substituicoes aplicadas: ${applied}`;
+      if (applied < requested) {
+        msg += `\nAviso: alguns placeholders podem nao ter sido encontrados no template.`;
+      }
+      return { content: msg, data: { output: outputPath, requested, applied, title: docTitle } };
     } catch (err) {
       return {
-        content: `Erro parseando resposta: ${(err as Error).message}\nRaw: ${result.stdout.slice(0, 300)}`,
+        content: `Erro preenchendo Word: ${(err as Error).message}. Verifique se o template e .docx valido.`,
         error: true,
       };
     }

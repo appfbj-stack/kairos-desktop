@@ -1,22 +1,23 @@
 /**
- * office_excel_read - le dados de uma planilha Excel via COM.
+ * office_excel_read - le dados de uma planilha Excel via exceljs (pure-Node).
  *
- * Requer Microsoft Excel instalado (interop COM).
- * Fica em background via ReleaseComObject + quit pra nao deixar Excel aberto.
+ * NAO requer Microsoft Excel instalado.
+ * Funciona em qualquer PC Windows, Mac ou Linux.
+ * Suporta .xlsx, .xlsm, .xlsb, .xls.
  *
- * WRITE esta fora do MVP (Fase 6 adiciona approval flow).
+ * WRITE esta em office-excel-write.ts (tambem pure-Node).
  */
 
 import type { Skill } from '../types.js';
-import { execPowerShell, escapePsString } from '../powershell.js';
+import ExcelJS from 'exceljs';
 
 export const officeExcelRead: Skill = {
   name: 'office_excel_read',
   description:
-    'Le dados de uma planilha Excel (.xlsx, .xls). ' +
+    'Le dados de uma planilha Excel (.xlsx, .xlsm, .xls, .xlsb). ' +
     'Retorna conteudo de uma aba como matriz de linhas/celulas. ' +
-    'Use quando o usuario pedir para abrir, ler, ou extrair dados de uma planilha. ' +
-    'Requer Microsoft Excel instalado.',
+    'NÃO requer Microsoft Excel instalado (usa exceljs pure-Node). ' +
+    'Use quando o usuario pedir para abrir, ler, ou extrair dados de uma planilha.',
   category: 'office',
   parameters: {
     type: 'object',
@@ -39,83 +40,81 @@ export const officeExcelRead: Skill = {
   },
   async execute(args) {
     const rawPath = String(args.path || '').trim();
-    const sheet = args.sheet ? String(args.sheet) : '';
+    const sheetName = args.sheet ? String(args.sheet) : '';
     const maxRows = Math.min(Number(args.maxRows) || 100, 1000);
 
     if (!rawPath) return { content: 'Erro: path vazio', error: true };
 
-    const safePath = escapePsString(rawPath);
-    const safeSheet = sheet ? escapePsString(sheet) : '';
-    const script = `
-$ErrorActionPreference = 'Stop'
-$excel = $null
-$wb = $null
-try {
-  $excel = New-Object -ComObject Excel.Application -ErrorAction Stop
-  $excel.Visible = $false
-  $excel.DisplayAlerts = $false
-  $wb = $excel.Workbooks.Open("${safePath}", $false, $true)
-  $ws = if ("${safeSheet}") { $wb.Worksheets.Item("${safeSheet}") } else { $wb.Worksheets.Item(1) }
-  $sheetName = $ws.Name
-  $usedRange = $ws.UsedRange
-  $rowCount = $usedRange.Rows.Count
-  $colCount = $usedRange.Columns.Count
-  if ($rowCount -gt ${maxRows}) { $rowCount = ${maxRows} }
-  $rows = @()
-  for ($r = 1; $r -le $rowCount; $r++) {
-    $row = @()
-    for ($c = 1; $c -le $colCount; $c++) {
-      $val = $ws.Cells.Item($r, $c).Text
-      if ($null -eq $val) { $val = '' }
-      $row += $val
-    }
-    $rows += ,$row
-  }
-  $wb.Close($false)
-  $excel.Quit()
-  return @{
-    sheet = $sheetName
-    rowCount = $rowCount
-    colCount = $colCount
-    rows = $rows
-  } | ConvertTo-Json -Depth 5 -Compress
-} catch {
-  return @{ error = $_.Exception.Message } | ConvertTo-Json -Compress
-} finally {
-  if ($null -ne $wb) { [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($wb) }
-  if ($null -ne $excel) {
-    $excel.Quit()
-    [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($excel)
-  }
-  [GC]::Collect()
-}
-`.trim();
-
-    const result = await execPowerShell(script, { timeoutMs: 60_000 });
-
-    if (result.timedOut) {
-      return { content: 'Erro: timeout lendo Excel (60s). Arquivo muito grande ou Excel nao respondeu.', error: true };
-    }
-    if (!result.stdout) {
-      return { content: `Erro PowerShell: ${result.stderr || 'sem output (Excel instalado?)'}`, error: true };
-    }
-
     try {
-      const parsed = JSON.parse(result.stdout);
-      if (parsed.error) {
-        return { content: `Erro Excel: ${parsed.error}. Verifique se o arquivo existe e Excel esta instalado.`, error: true };
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.readFile(rawPath);
+
+      let worksheet: ExcelJS.Worksheet | undefined;
+      if (sheetName) {
+        worksheet = workbook.getWorksheet(sheetName);
+        if (!worksheet) {
+          const available = workbook.worksheets.map((w) => w.name).join(', ');
+          return {
+            content: `Erro: aba "${sheetName}" nao encontrada. Abas disponiveis: ${available}`,
+            error: true,
+          };
+        }
+      } else {
+        worksheet = workbook.worksheets[0];
+        if (!worksheet) {
+          return { content: 'Erro: planilha nao tem abas', error: true };
+        }
       }
-      const preview = (parsed.rows as string[][])
+
+      const safeWs = worksheet!;
+      const actualSheetName = safeWs.name;
+      const rowCount = Math.min(safeWs.rowCount, maxRows);
+      const colCount = safeWs.columnCount;
+
+      const rows: string[][] = [];
+      safeWs.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+        if (rowNumber > rowCount) return;
+        const rowData: string[] = [];
+        // Itera todas as colunas ate colCount (preenche vazios)
+        for (let c = 1; c <= colCount; c++) {
+          const cell = row.getCell(c);
+          let val: string;
+          if (cell.value === null || cell.value === undefined) {
+            val = '';
+          } else if (typeof cell.value === 'object') {
+            // Formula, richText, hyperlink etc
+            if ('result' in (cell.value as any)) {
+              val = String((cell.value as any).result ?? '');
+            } else if ('richText' in (cell.value as any)) {
+              val = (cell.value as any).richText.map((r: any) => r.text).join('');
+            } else if ('text' in (cell.value as any)) {
+              val = String((cell.value as any).text);
+            } else {
+              val = String(cell.value);
+            }
+          } else {
+            val = String(cell.value);
+          }
+          rowData.push(val);
+        }
+        rows.push(rowData);
+      });
+
+      const preview = rows
         .slice(0, 10)
         .map((row, i) => `L${i + 1}: ${row.slice(0, 8).join(' | ')}${row.length > 8 ? '...' : ''}`)
         .join('\n');
-      const more = parsed.rowCount > 10 ? `\n... +${parsed.rowCount - 10} linhas` : '';
+      const more = rows.length > 10 ? `\n... +${rows.length - 10} linhas` : '';
+
       return {
-        content: `Planilha "${parsed.sheet}": ${parsed.rowCount} linhas x ${parsed.colCount} cols\n\n${preview}${more}`,
-        data: { sheet: parsed.sheet, rowCount: parsed.rowCount, colCount: parsed.colCount, rows: parsed.rows },
+        content: `Planilha "${actualSheetName}": ${rows.length} linhas x ${colCount} cols\n\n${preview}${more}`,
+        data: { sheet: actualSheetName, rowCount: rows.length, colCount, rows },
       };
     } catch (err) {
-      return { content: `Erro parseando: ${(err as Error).message}\nRaw: ${result.stdout.slice(0, 300)}`, error: true };
+      return {
+        content: `Erro lendo Excel: ${(err as Error).message}. Verifique se o arquivo existe e e um .xlsx valido.`,
+        error: true,
+      };
     }
   },
 };

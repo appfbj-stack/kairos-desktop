@@ -1,22 +1,23 @@
 /**
- * office_word_read - extrai texto de um documento Word (.docx, .doc) via COM.
+ * office_word_read - extrai texto de um documento Word via mammoth (pure-Node).
  *
- * Requer Microsoft Word instalado.
- * Mantem Word em background via ReleaseComObject + quit pra nao deixar processo preso.
+ * NAO requer Microsoft Word instalado.
+ * Funciona em qualquer PC Windows, Mac ou Linux.
+ * Suporta .docx (formato moderno). Para .doc antigo, nao suportado.
  *
- * WRITE esta fora do MVP (Fase 6 adiciona approval flow).
+ * WRITE esta em office-word-write.ts (tambem pure-Node).
  */
 
 import type { Skill } from '../types.js';
-import { execPowerShell, escapePsString } from '../powershell.js';
+import mammoth from 'mammoth';
 
 export const officeWordRead: Skill = {
   name: 'office_word_read',
   description:
-    'Extrai o texto de um documento Word (.docx, .doc, .rtf). ' +
-    'Retorna o conteudo em texto puro (sem formatacao). ' +
-    'Use quando o usuario pedir para ler, abrir, ou extrair texto de um documento Word. ' +
-    'Requer Microsoft Word instalado.',
+    'Extrai texto de um documento Word (.docx). ' +
+    'NAO requer Microsoft Word instalado (usa mammoth pure-Node). ' +
+    'Retorna o texto extraido (sem formatacao). ' +
+    'Use quando o usuario pedir para abrir, ler, ou extrair texto de um documento Word.',
   category: 'office',
   parameters: {
     type: 'object',
@@ -27,80 +28,49 @@ export const officeWordRead: Skill = {
       },
       maxChars: {
         type: 'number',
-        description: 'Maximo de caracteres a retornar (default 20000, max 200000).',
-        default: 20000,
+        description: 'Maximo de caracteres a retornar (default 10000, max 200000).',
+        default: 10000,
       },
     },
     required: ['path'],
   },
   async execute(args) {
     const rawPath = String(args.path || '').trim();
-    const maxChars = Math.min(Number(args.maxChars) || 20_000, 200_000);
+    const maxChars = Math.min(Number(args.maxChars) || 10000, 200000);
 
     if (!rawPath) return { content: 'Erro: path vazio', error: true };
 
-    const safePath = escapePsString(rawPath);
-    const script = `
-$ErrorActionPreference = 'Stop'
-$word = $null
-$doc = $null
-try {
-  $word = New-Object -ComObject Word.Application -ErrorAction Stop
-  $word.Visible = $false
-  $word.DisplayAlerts = 0
-  $doc = $word.Documents.Open("${safePath}", $false, $true)
-  $text = $doc.Content.Text
-  $charCount = $text.Length
-  $truncated = $false
-  if ($text.Length -gt ${maxChars}) {
-    $text = $text.Substring(0, ${maxChars}) + '...[truncated]'
-    $truncated = $true
-  }
-  $doc.Close($false)
-  $word.Quit()
-  return @{
-    charCount = $charCount
-    truncated = $truncated
-    text = $text
-  } | ConvertTo-Json -Depth 3 -Compress
-} catch {
-  return @{ error = $_.Exception.Message } | ConvertTo-Json -Compress
-} finally {
-  if ($null -ne $doc) { [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($doc) }
-  if ($null -ne $word) {
-    $word.Quit()
-    [void][System.Runtime.InteropServices.Marshal]::ReleaseComObject($word)
-  }
-  [GC]::Collect()
-}
-`.trim();
-
-    const result = await execPowerShell(script, { timeoutMs: 60_000 });
-
-    if (result.timedOut) {
-      return { content: 'Erro: timeout lendo Word (60s). Documento muito grande ou Word nao respondeu.', error: true };
-    }
-    if (!result.stdout) {
-      return { content: `Erro PowerShell: ${result.stderr || 'sem output (Word instalado?)'}`, error: true };
-    }
-
     try {
-      const parsed = JSON.parse(result.stdout);
-      if (parsed.error) {
-        return { content: `Erro Word: ${parsed.error}. Verifique se o arquivo existe e Word esta instalado.`, error: true };
+      const result = await mammoth.extractRawText({ path: rawPath });
+      let text = result.value || '';
+
+      // Mammoth retorna \n\n entre paragrafos; mantem
+      const totalLength = text.length;
+      if (text.length > maxChars) {
+        text = text.substring(0, maxChars);
       }
-      if (parsed.charCount === 0) {
-        return { content: `Documento Word vazio ou sem texto extraivel: ${rawPath}` };
-      }
-      const preview = parsed.text.length > 1500
-        ? parsed.text.slice(0, 1500) + `\n... [+${parsed.charCount - 1500} chars]`
-        : parsed.text;
+
+      const preview = text.split('\n').slice(0, 30).join('\n');
+      const more =
+        totalLength > maxChars
+          ? `\n... +${totalLength - maxChars} caracteres omitidos`
+          : totalLength > preview.length
+          ? `\n... +${text.split('\n').length - 30} linhas omitidas`
+          : '';
+
+      const warnings = result.messages.length > 0
+        ? `\n\nAvisos mammoth: ${result.messages.slice(0, 3).map(m => m.message).join('; ')}`
+        : '';
+
       return {
-        content: `Word (${parsed.charCount} chars${parsed.truncated ? ', truncado' : ''}): ${rawPath}\n\n${preview}`,
-        data: { charCount: parsed.charCount, truncated: parsed.truncated, path: rawPath },
+        content: `Documento Word: ${totalLength} caracteres extraidos\n\n${preview}${more}${warnings}`,
+        data: { length: totalLength, truncated: totalLength > maxChars, text, warnings: result.messages.map(m => m.message) },
       };
     } catch (err) {
-      return { content: `Erro parseando: ${(err as Error).message}\nRaw: ${result.stdout.slice(0, 300)}`, error: true };
+      return {
+        content: `Erro lendo Word: ${(err as Error).message}. Verifique se o arquivo existe e e um .docx valido.`,
+        error: true,
+      };
     }
   },
 };
