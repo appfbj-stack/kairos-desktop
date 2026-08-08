@@ -15,7 +15,7 @@
  */
 
 import Fastify, { type FastifyInstance } from 'fastify';
-import { existsSync } from 'node:fs';
+import { existsSync, createReadStream } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { invokeLLMUseCase } from './application/llm/invoke-llm.usecase.js';
@@ -128,10 +128,11 @@ export async function buildServer(): Promise<FastifyInstance> {
     await app.register(import('@fastify/static'), {
       root: staticRoot,
       prefix: '/',
-      decorateReply: false,
+      decorateReply: true, // C4 fix: precisa ser true para o setNotFoundHandler usar reply.sendFile
     });
     // SPA fallback: qualquer GET que nao foi rota da API retorna index.html
     app.setNotFoundHandler((req, reply) => {
+      // Rotas da API nao caem no SPA fallback
       if (req.url.startsWith('/api/') || req.url.startsWith('/chat/') ||
           req.url.startsWith('/llm/') || req.url.startsWith('/memory/') ||
           req.url.startsWith('/skills/') || req.url.startsWith('/upload') ||
@@ -139,7 +140,13 @@ export async function buildServer(): Promise<FastifyInstance> {
           req.url === '/health') {
         return reply.code(404).send({ error: 'Not found' });
       }
-      return reply.sendFile('index.html');
+      // SPA: serve index.html. readFile + send (mais confiavel que sendFile em alguns edge cases)
+      const indexPath = resolve(staticRoot, 'index.html');
+      if (existsSync(indexPath)) {
+        reply.type('text/html');
+        return reply.send(createReadStream(indexPath));
+      }
+      return reply.code(404).send({ error: 'UI not found' });
     });
     app.log.info({ staticRoot }, 'Serving UI from static dir');
   } else {
@@ -404,9 +411,30 @@ export async function buildServer(): Promise<FastifyInstance> {
     return getMemoryRepository().exportAll();
   });
 
-  app.delete('/memory/all', async () => {
-    // TODO: requer confirmacao + audit log
-    getMemoryRepository().deleteAll();
+  // C8 fix: deleteAll agora exige header X-Confirm explicito, faz audit log,
+  // e nao apaga o audit_log em si (que eh append-only por design).
+  app.delete('/memory/all', async (req, reply) => {
+    const confirmed = req.headers['x-confirm'] === 'yes-delete-everything';
+    if (!confirmed) {
+      return reply.code(400).send({
+        error: 'Cabecalho X-Confirm: yes-delete-everything obrigatorio para esta operacao destrutiva',
+      });
+    }
+    const repo = getMemoryRepository();
+    // Audit log ANTES de apagar (assim registramos a intencao)
+    try {
+      repo.addAudit({
+        eventType: 'memory.deleteAll',
+        actor: req.ip || 'unknown',
+        payload: { ts: Date.now(), confirmed: true },
+        approvedBy: null,
+        decision: 'allow',
+      });
+    } catch (err) {
+      app.log.warn({ err }, 'audit log antes de deleteAll falhou (continuando)');
+    }
+    // NUNCA apagar o audit_log em si (imutavel)
+    repo.deleteAll();
     return { deleted: true, ts: Date.now() };
   });
 
@@ -459,7 +487,7 @@ export async function buildServer(): Promise<FastifyInstance> {
     }
     reply.header('Content-Type', att.mimeType);
     reply.header('Content-Disposition', `inline; filename="${att.name}"`);
-    return reply.send(require('node:fs').createReadStream(att.path));
+    return reply.send(createReadStream(att.path));
   });
 
   /**

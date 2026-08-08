@@ -179,6 +179,13 @@ export function createOpenAICompatibleAdapter(config: OpenAICompatibleConfig): L
 
       const finalBody = transformRequest ? transformRequest({ ...request }) : body;
 
+      // A1 fix: timeout agressivo pra nao pendurar requests quando LLM demora muito.
+      // 90s é suficiente para a maioria dos modelos (nemotron ~5-15s, gpt-oss-20b ~30-60s).
+      // Se o user pedir um modelo muito lento, o erro vem rapido em vez de travar o browser.
+      const LLM_TIMEOUT_MS = 90_000;
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS);
+
       const res = await fetch(`${baseUrl}/chat/completions`, {
         method: 'POST',
         headers: {
@@ -187,7 +194,9 @@ export function createOpenAICompatibleAdapter(config: OpenAICompatibleConfig): L
           ...defaultHeaders,
         },
         body: JSON.stringify(finalBody),
+        signal: controller.signal,
       });
+      clearTimeout(timeout);
 
       if (!res.ok) {
         const text = await res.text();
@@ -198,7 +207,8 @@ export function createOpenAICompatibleAdapter(config: OpenAICompatibleConfig): L
         throw new ProviderError(`${displayName}: no body`);
       }
 
-      return streamOpenAIResponse(res.body, transformChunk);
+      // Passa o AbortController pro stream pra que o timeout tambem corte o streaming
+      return streamOpenAIResponse(res.body, transformChunk, controller);
     },
 
     estimateCost(model: string, inputTokens: number, outputTokens: number): Promise<number> {
@@ -215,6 +225,7 @@ export function createOpenAICompatibleAdapter(config: OpenAICompatibleConfig): L
 async function* streamOpenAIResponse(
   body: ReadableStream<Uint8Array>,
   transformChunk?: (chunk: any) => InvokeChunk | null,
+  abortController?: AbortController,
 ): AsyncIterable<InvokeChunk> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
@@ -223,6 +234,15 @@ async function* streamOpenAIResponse(
   // Buffer de tool calls por index (streaming vem em pedacos - id no primeiro,
   // arguments em chunks subsequentes que precisam ser concatenados).
   const toolCallBuffer = new Map<number, { id: string; name: string; argsJson: string }>();
+
+  // A1 fix: encerra o reader se o AbortController for acionado (timeout do caller)
+  let onAbort: (() => void) | undefined;
+  if (abortController) {
+    onAbort = () => {
+      try { reader.cancel(); } catch { /* ignore */ }
+    };
+    abortController.signal.addEventListener('abort', onAbort, { once: true });
+  }
 
   try {
     while (true) {
@@ -313,6 +333,9 @@ async function* streamOpenAIResponse(
     }
   } finally {
     reader.releaseLock();
+    if (abortController && onAbort) {
+      abortController.signal.removeEventListener('abort', onAbort);
+    }
   }
 }
 

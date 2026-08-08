@@ -178,15 +178,30 @@ export function ChatPanel() {
 
     let fullContent = '';
     try {
-      // Importante: mandar attachments NO user message (ultimo), nao no system prompt
-      const messagesForApi = [{ role: 'user' as const, content: text, attachments: attsToSend }];
+      // C1 fix: enviar historico da conversa (max 20 turnos anteriores) + mensagem atual com anexos.
+      // O store ja tem as mensagens anteriores — aproveitamos pra dar contexto ao LLM.
+      const MAX_HISTORY_TURNS = 20;
+      const previousMessages = messages
+        .filter((m) => !m.streaming && !m.error && m.content.trim().length > 0)
+        .slice(-MAX_HISTORY_TURNS)
+        .map((m) => ({
+          role: m.role as 'user' | 'assistant' | 'system',
+          content: m.content,
+          // Anexos antigos nao sao reenviados (path absoluto ja nao faz sentido no novo contexto).
+          // Mantemos apenas a mensagem de texto puro.
+        }));
+      // A mensagem atual (com anexos) eh a ultima do array
+      const messagesForApi = [
+        ...previousMessages,
+        { role: 'user' as const, content: text, attachments: attsToSend },
+      ];
 
       for await (const chunk of chatApi.chatStream({
         messages: messagesForApi,
         systemPrompt,
         provider: 'openrouter',
         model,
-        maxTokens: 600,
+        maxTokens: 1500, // A4: aumentado para acomodar tool calls com argumentos grandes
         useTools: true, // Phase 4: habilita function calling
       })) {
         if (chunk.type === 'content' && chunk.content) {

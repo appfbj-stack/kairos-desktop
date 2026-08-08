@@ -401,12 +401,13 @@ export class MemoryRepository {
   // =====================================================
 
   /**
-   * Apaga TODOS os dados do usuario (LGPD art. 18 - direito ao esquecimento).
+   * Apaga os dados do usuario (LGPD art. 18 - direito ao esquecimento).
+   * C7 fix: NAO apaga o audit_log (imutavel por design).
+   * O audit log registra o evento ANTES do delete (no caller), e fica preservado.
    */
   deleteAll(): void {
     this.migrate();
     this.db.exec(`
-      DELETE FROM audit_log;
       DELETE FROM messages;
       DELETE FROM conversations;
       DELETE FROM entities;
