@@ -15,6 +15,7 @@ import { officeExcelWrite } from './builtin/office-excel-write.js';
 import { officeWordWrite } from './builtin/office-word-write.js';
 import { fileOrganize } from './builtin/file-organize.js';
 import { generateVisual } from './builtin/generate-visual.js';
+import { igrejaDocumento } from './builtin/igreja-documento.js';
 import { pdfConvert } from './builtin/pdf-converter.js';
 import { browserNavigate } from './builtin/browser-navigate.js';
 
@@ -40,6 +41,8 @@ const builtinSkills: Skill[] = [
   fileOrganize,
   // Fase 4.3 - gerar visual (banner, carousel, card via HTML+Puppeteer)
   generateVisual,
+  // Fase 4.4 - documentos oficiais da igreja (carta, recibo, ata, dizimo) via Playwright -> PDF
+  igrejaDocumento,
 ];
 
 class SkillRegistry {

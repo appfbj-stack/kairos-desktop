@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Carta - {{tipo}}</title>
+  <style>
+    @page {
+      size: A4;
+      margin: 20mm 20mm 25mm 20mm;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Georgia', 'Times New Roman', serif;
+      font-size: 12pt;
+      line-height: 1.5;
+      color: #1a2540;
+      background: #fff;
+    }
+    .header {
+      border-bottom: 2px solid #1a2540;
+      padding-bottom: 12pt;
+      margin-bottom: 24pt;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+    }
+    .header-left h1 {
+      font-size: 18pt;
+      color: #1a2540;
+      letter-spacing: 0.5px;
+    }
+    .header-left .tagline {
+      font-size: 9pt;
+      color: #6b7280;
+      font-style: italic;
+      margin-top: 2pt;
+    }
+    .header-right {
+      text-align: right;
+      font-size: 9pt;
+      color: #6b7280;
+      line-height: 1.4;
+    }
+    .doc-type {
+      text-align: center;
+      font-size: 14pt;
+      font-weight: bold;
+      letter-spacing: 2px;
+      color: #1a2540;
+      text-transform: uppercase;
+      margin-bottom: 20pt;
+    }
+    .meta {
+      text-align: right;
+      font-size: 10pt;
+      color: #1a2540;
+      margin-bottom: 20pt;
+    }
+    .destinatario {
+      margin-bottom: 20pt;
+    }
+    .destinatario .label {
+      font-size: 8pt;
+      color: #6b7280;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 4pt;
+    }
+    .destinatario .nome {
+      font-size: 12pt;
+      font-weight: bold;
+      color: #1a2540;
+    }
+    .destinatario .info {
+      font-size: 11pt;
+      color: #1a2540;
+      margin-top: 2pt;
+    }
+    .assunto {
+      font-weight: bold;
+      margin: 18pt 0 14pt 0;
+      font-size: 11pt;
+    }
+    .corpo {
+      text-align: justify;
+      margin-bottom: 18pt;
+    }
+    .corpo p {
+      margin-bottom: 12pt;
+      text-indent: 0;
+    }
+    .corpo p.saudacao {
+      font-weight: bold;
+      margin-bottom: 14pt;
+    }
+    .corpo p.despedida {
+      margin-top: 18pt;
+      margin-bottom: 60pt;
+    }
+    .signature {
+      text-align: center;
+      margin-top: 40pt;
+    }
+    .signature .line {
+      border-top: 1px solid #1a2540;
+      width: 60%;
+      margin: 0 auto 6pt auto;
+    }
+    .signature .name {
+      font-size: 11pt;
+      font-weight: bold;
+    }
+    .signature .role {
+      font-size: 9pt;
+      color: #6b7280;
+    }
+    .footer {
+      position: fixed;
+      bottom: 8mm;
+      left: 20mm;
+      right: 20mm;
+      border-top: 1px solid #d4a017;
+      padding-top: 4pt;
+      font-size: 8pt;
+      color: #6b7280;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="header-left">
+      <h1>{{church_name}}</h1>
+      <div class="tagline">{{church_tagline}}</div>
+    </div>
+    <div class="header-right">
+      {{church_address}}<br>
+      {{church_phone}}<br>
+      {{church_email}}
+    </div>
+  </div>
+
+  <div class="doc-type">{{tipo}}</div>
+
+  <div class="meta">
+    {{cidade}}, {{data_extenso}}
+  </div>
+
+  <div class="destinatario">
+    <div class="label">A(o)</div>
+    <div class="nome">{{destinatario_nome}}</div>
+    <div class="info">{{destinatario_cargo}}</div>
+    <div class="info">{{destinatario_igreja}}</div>
+    <div class="info">{{destinatario_endereco}}</div>
+  </div>
+
+  <div class="assunto">
+    <strong>Assunto:</strong> {{assunto}}
+  </div>
+
+  <div class="corpo">
+    <p class="saudacao">Prezado(a) {{destinatario_nome_curto}},</p>
+    {{{corpo_html}}}
+    <p class="despedida">Atenciosamente,</p>
+  </div>
+
+  <div class="signature">
+    <div class="line">&nbsp;</div>
+    <div class="name">{{pastor_nome}}</div>
+    <div class="role">{{pastor_cargo}}</div>
+  </div>
+
+  <div class="footer">
+    {{church_name}} - {{church_address}} - {{church_phone}}
+  </div>
+</body>
+</html>
