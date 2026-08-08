@@ -77,8 +77,9 @@ RUN npx playwright install chromium
 # Copia o build do stage anterior
 COPY --from=builder /app/dist ./dist
 
-# Copia os templates HTML (tsc nao copia .html, mas as skills de visual/igreja precisam)
+# Copia assets nao-TS (tsc nao inclui .html, .sql, etc) que as skills/memory precisam
 COPY --from=builder /app/core/templates /app/dist/core/templates
+COPY --from=builder /app/core/infrastructure/memory/migrations /app/dist/core/infrastructure/memory/migrations
 
 # Volume para SQLite (persiste entre deploys)
 RUN mkdir -p /app/data
