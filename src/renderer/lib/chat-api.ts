@@ -1,19 +1,36 @@
 /**
  * Cliente Kairos AI Core.
  *
- * Funciona em 2 modos:
+ * Funciona em 3 modos:
  *  1. **Electron**: usa window.kairos (IPC bridge) - via preload em dist/preload/index.cjs
- *  2. **Browser puro** (Vite em :5173 direto no Chrome/Edge): usa fetch direto pro Core em :4096
+ *  2. **Dev local** (Vite em :5173): usa fetch direto pro Core em :4096
+ *  3. **Produção** (https://kairosdesktop.fbautomacao.space): usa mesma origem (relative URL)
  *
- * O modo é detectado automaticamente: se window.kairos existir, usa IPC. Caso contrario,
- * faz fetch direto (requer Core rodando com CORS liberado, que ja esta).
+ * O modo é detectado automaticamente: se window.kairos existir, usa IPC.
+ * Caso contrario, se estiver em localhost:5173, faz fetch pro Core local.
+ * Senão, usa URL relativa (mesma origem = o Core servindo a UI no mesmo host).
  *
  * Documentacao:
  *  - ChatInput: { messages, model?, provider?, systemPrompt?, temperature?, maxTokens?, useTools? }
  *  - ChatChunk: { type: 'content'|'tool_call'|'tool_result'|'done'|'error', ... }
  */
 
-const CORE_BASE_URL = 'http://127.0.0.1:4096';
+/**
+ * Detecta o base URL do Core baseado no ambiente:
+ * - Dev (Vite :5173): http://127.0.0.1:4096
+ * - Producao (servido pelo proprio Core): mesma origem ('')
+ */
+function detectCoreBaseUrl(): string {
+  if (typeof window === 'undefined') return 'http://127.0.0.1:4096';
+  // Dev local: Vite serve em 5173, Core em 4096
+  if (window.location.port === '5173' || window.location.port === '5174') {
+    return 'http://127.0.0.1:4096';
+  }
+  // Producao: Core serve a UI, fetch vai pra mesma origem (relative)
+  return '';
+}
+
+const CORE_BASE_URL = detectCoreBaseUrl();
 
 export interface ChatInput {
   messages: Array<{
