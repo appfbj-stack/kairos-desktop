@@ -24,6 +24,7 @@ function safeUuid(): string {
 }
 
 const MAX_ATTACHMENTS = 4;
+const MAX_INPUT_LENGTH = 8 * 1024; // M1 fix: limita input a 8KB (~2k tokens)
 
 export function ChatPanel() {
   const activeId = useChatStore((s) => s.activeId);
@@ -129,15 +130,21 @@ export function ChatPanel() {
 
   function appendSystemError(msg: string) {
     if (!activeId) return;
+    // M2 fix: usa role 'system' com prefixo, nao 'assistant' (confundia o LLM)
     addMessage(activeId, {
       id: safeUuid(),
-      role: 'assistant',
-      content: `\n\n_Erro: ${msg}_`,
+      role: 'system',
+      content: `[Sistema] ${msg}`,
     });
   }
 
   async function sendMessage(text: string) {
     if ((!text.trim() && attachments.length === 0) || isStreaming || !activeId) return;
+    // M1 fix: rejeita input maior que o limite (trunca ao inves de bloquear pra UX)
+    if (text.length > MAX_INPUT_LENGTH) {
+      appendSystemError(`Mensagem muito longa (${(text.length / 1024).toFixed(1)}KB). Limite: ${MAX_INPUT_LENGTH / 1024}KB. Tente quebrar em pedacos.`);
+      return;
+    }
     const convId = activeId;
     const attsToSend = attachments;
 
@@ -256,9 +263,10 @@ export function ChatPanel() {
             <h2>Ola! Sou o Kairos.</h2>
             <p>Me pergunte qualquer coisa, ou anexe um arquivo 📎.</p>
             <div className="suggestions">
-              <button onClick={() => setInput('O que voce pode fazer por mim?')}>O que voce pode fazer?</button>
-              <button onClick={() => setInput('Me ajude a organizar minha semana.')}>Me ajude a organizar minha semana</button>
-              <button onClick={() => setInput('Resuma as ultimas noticias de tecnologia.')}>Resuma as ultimas noticias de tecnologia</button>
+              {/* M4 fix: botoes enviam direto ao inves de so preencher o input */}
+              <button onClick={() => sendMessage('O que voce pode fazer por mim?')}>O que voce pode fazer?</button>
+              <button onClick={() => sendMessage('Me ajude a organizar minha semana.')}>Me ajude a organizar minha semana</button>
+              <button onClick={() => sendMessage('Resuma as ultimas noticias de tecnologia.')}>Resuma as ultimas noticias de tecnologia</button>
             </div>
           </div>
         )}
