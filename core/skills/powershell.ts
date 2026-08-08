@@ -103,9 +103,19 @@ export function execPowerShell(
 
 /**
  * Helper: escapa uma string pra uso seguro em aspas duplas dentro de um script PS.
- * Usado apenas para valores que vem de input do usuario; idealmente evita-se
- * passando via array de argumentos (TODO Fase 4.1).
+ *
+ * IMPORTANTE: nao escapa `\` porque o PowerShell usa `` ` `` (backtick) como escape,
+ * nao `\`. Quando o Node spawn passa o script via -Command, `\U`, `\k`, `\t`, `\f`
+ * sao interpretados como chars de controle (\U=null, \k=vk, \t=tab, \f=form feed).
+ * Por isso usamos SEMPRE aspas SIMPLES no PS quando ha path: '$path' ao inves de "$path".
+ *
+ * Caracteres que precisam escape em aspas duplas PS:
+ *  - " -> `" (backtick quote)
+ *  - $ -> `$ (backtick dollar)
+ *  - ` -> `` (double backtick)
+ *
+ * Para paths/argumentos do usuario, prefira aspas simples no script.
  */
 export function escapePsString(s: string): string {
-  return s.replace(/\\/g, '\\\\').replace(/"/g, '`"').replace(/\$/g, '`$').replace(/`/g, '``');
+  return s.replace(/"/g, '`"').replace(/\$/g, '`$').replace(/`/g, '``');
 }

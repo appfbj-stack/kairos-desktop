@@ -11,6 +11,9 @@ import { searchFiles } from './builtin/search.js';
 import { clipboardRead, clipboardWrite } from './builtin/clipboard.js';
 import { officeExcelRead } from './builtin/office-excel.js';
 import { officeWordRead } from './builtin/office-word.js';
+import { officeExcelWrite } from './builtin/office-excel-write.js';
+import { officeWordWrite } from './builtin/office-word-write.js';
+import { fileOrganize } from './builtin/file-organize.js';
 import { pdfConvert } from './builtin/pdf-converter.js';
 import { browserNavigate } from './builtin/browser-navigate.js';
 
@@ -30,6 +33,10 @@ const builtinSkills: Skill[] = [
   officeWordRead,
   pdfConvert,
   browserNavigate,
+  // Fase 4.2 - 3 skills de escrita (preencher e organizar)
+  officeExcelWrite,
+  officeWordWrite,
+  fileOrganize,
 ];
 
 class SkillRegistry {
