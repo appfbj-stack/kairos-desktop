@@ -7,6 +7,16 @@
 
 import { create } from 'zustand';
 
+export interface MessageAttachment {
+  id: string;
+  path: string;
+  name: string;
+  mimeType: string;
+  sizeBytes: number;
+  dataUri?: string;
+  extractedText?: string;
+}
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant' | 'system' | 'tool';
@@ -15,6 +25,7 @@ export interface ChatMessage {
   streaming?: boolean;
   toolCalls?: Array<{ name: string; args: unknown }>;
   error?: string;
+  attachments?: MessageAttachment[];
 }
 
 export interface Conversation {

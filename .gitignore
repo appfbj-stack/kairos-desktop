@@ -60,6 +60,13 @@ kairos-data/
 # OpenSquad runtime (downloaded at first run)
 opensquad/_runtime/
 opensquad/.opensquad-version
+.opensquad-tmp/
+.opensquad-tmp2/
+
+# Test scripts (gerados localmente)
+criar-pdf-teste.mjs
+test-fixtures/teste-*.pdf
+test-fixtures/teste-*.txt
 
 # Test artifacts
 test-results/

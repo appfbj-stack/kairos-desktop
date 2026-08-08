@@ -33,6 +33,13 @@ export const api = {
     getSettings: () => ipcRenderer.invoke('system:get-settings'),
     setSetting: (key: string, value: unknown) => ipcRenderer.invoke('system:set-setting', key, value),
   },
+  upload: {
+    /**
+     * Abre dialog.showOpenDialog no main process, lê o arquivo selecionado,
+     * faz upload via /upload e retorna o ChatAttachment.
+     */
+    pickAndUpload: () => ipcRenderer.invoke('upload:pick'),
+  },
 };
 
 try {

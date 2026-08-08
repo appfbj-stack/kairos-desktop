@@ -16,7 +16,8 @@
 
 import Fastify, { type FastifyInstance } from 'fastify';
 import { existsSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { invokeLLMUseCase } from './application/llm/invoke-llm.usecase.js';
 import { listProvidersUseCase } from './application/llm/select-model.usecase.js';
 import { storeEntityUseCase, StoreEntityInputSchema } from './application/memory/store-entity.usecase.js';
@@ -25,11 +26,16 @@ import { recallEntitiesUseCase } from './application/memory/recall-entities.usec
 import { createConversationUseCase, addMessageUseCase, listConversationsUseCase, listMessagesUseCase, CreateConversationInputSchema, AddMessageInputSchema } from './application/memory/conversation.usecase.js';
 import { getMemoryRepository } from './infrastructure/memory/sqlite.repository.js';
 import { skillRegistry } from './skills/registry.js';
+import { uploadService, UploadError, getUploadsRoot } from './infrastructure/upload/upload.service.js';
 import { z } from 'zod';
 import type { ChatMessage, ToolDefinition } from './infrastructure/llm/llm-provider.interface.js';
 
 const PORT = Number(process.env.KAIROS_PORT || 4096);
 const HOST = process.env.KAIROS_HOST || '127.0.0.1';
+
+// ESM equivalent of __dirname
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const ChatInputSchema = z.object({
   messages: z.array(
@@ -47,6 +53,19 @@ const ChatInputSchema = z.object({
         )
         .optional(),
       name: z.string().optional(),
+      attachments: z
+        .array(
+          z.object({
+            id: z.string(),
+            path: z.string(),
+            name: z.string(),
+            mimeType: z.string(),
+            sizeBytes: z.number(),
+            dataUri: z.string().optional(),
+            extractedText: z.string().optional(),
+          }),
+        )
+        .optional(),
     }),
   ),
   tools: z
@@ -82,6 +101,14 @@ export async function buildServer(): Promise<FastifyInstance> {
     credentials: true,
   });
 
+  // Multipart para upload de arquivos
+  await app.register(import('@fastify/multipart'), {
+    limits: {
+      fileSize: 25 * 1024 * 1024, // 25MB
+      files: 4,                   // ate 4 arquivos por request
+    },
+  });
+
   // ---------- Health ----------
   app.get('/health', async () => ({
     status: 'ok',
@@ -107,7 +134,8 @@ export async function buildServer(): Promise<FastifyInstance> {
     app.setNotFoundHandler((req, reply) => {
       if (req.url.startsWith('/api/') || req.url.startsWith('/chat/') ||
           req.url.startsWith('/llm/') || req.url.startsWith('/memory/') ||
-          req.url.startsWith('/skills/') || req.url.startsWith('/system/') ||
+          req.url.startsWith('/skills/') || req.url.startsWith('/upload') ||
+          req.url.startsWith('/system/') ||
           req.url === '/health') {
         return reply.code(404).send({ error: 'Not found' });
       }
@@ -380,6 +408,65 @@ export async function buildServer(): Promise<FastifyInstance> {
     // TODO: requer confirmacao + audit log
     getMemoryRepository().deleteAll();
     return { deleted: true, ts: Date.now() };
+  });
+
+  // =====================================================
+  // UPLOAD ENDPOINTS (Fase 5 - file attachments no chat)
+  // =====================================================
+
+  /**
+   * POST /upload - recebe 1-N arquivos via multipart, salva em ~/.kairos/uploads/
+   * Retorna { attachments: ChatAttachment[] } com id, path, mimeType, etc.
+   * Auto-extrai texto de PDF/TXT/MD/JSON. Gera dataUri para imagens pequenas.
+   */
+  app.post('/upload', async (req, reply) => {
+    if (!req.isMultipart()) {
+      return reply.code(400).send({ error: 'Esperado multipart/form-data' });
+    }
+
+    const saved: any[] = [];
+    try {
+      const parts = req.parts({ limits: { fileSize: 25 * 1024 * 1024 } });
+      for await (const part of parts) {
+        if (part.type !== 'file') continue;
+        const buffer = await part.toBuffer();
+        const att = await uploadService.save({
+          buffer,
+          originalName: part.filename || 'arquivo',
+          mimeType: part.mimetype,
+        });
+        saved.push(att);
+      }
+      return { attachments: saved, count: saved.length };
+    } catch (err) {
+      app.log.error({ err }, 'upload error');
+      if (err instanceof UploadError) {
+        return reply.code(400).send({ error: err.message });
+      }
+      return reply.code(500).send({ error: (err as Error).message });
+    }
+  });
+
+  /**
+   * GET /upload/:id - serve um arquivo enviado (pra preview no chat).
+   * Substitui dataUri quando o arquivo for grande demais (>5MB).
+   */
+  app.get<{ Params: { id: string } }>('/upload/:id', async (req, reply) => {
+    const att = uploadService.get(req.params.id);
+    if (!att) return reply.code(404).send({ error: 'Upload nao encontrado ou expirado' });
+    if (!existsSync(att.path)) {
+      return reply.code(410).send({ error: 'Arquivo removido do disco' });
+    }
+    reply.header('Content-Type', att.mimeType);
+    reply.header('Content-Disposition', `inline; filename="${att.name}"`);
+    return reply.send(require('node:fs').createReadStream(att.path));
+  });
+
+  /**
+   * GET /upload - retorna diretorio raiz (debug/info)
+   */
+  app.get('/upload', async () => {
+    return { root: getUploadsRoot(), count: 0 };
   });
 
   return app;

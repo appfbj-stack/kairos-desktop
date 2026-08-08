@@ -77,6 +77,45 @@ export function createOpenAICompatibleAdapter(config: OpenAICompatibleConfig): L
           })),
         };
       }
+      // User com anexos: vira multimodal (vision) se tem imagem,
+      // ou texto + contexto dos anexos extraidos.
+      if (m.role === 'user' && m.attachments && m.attachments.length > 0) {
+        const imageAttachments = m.attachments.filter(
+          (a) => a.dataUri && a.mimeType.startsWith('image/'),
+        );
+        if (imageAttachments.length > 0) {
+          // Multimodal: content array com image_url + texto
+          const contentParts: any[] = imageAttachments.map((a) => ({
+            type: 'image_url',
+            image_url: { url: a.dataUri },
+          }));
+          // Texto com contexto dos anexos nao-imagem (PDF/TXT extraido)
+          const textAttachment = m.attachments.find((a) => a.extractedText);
+          const textContext = textAttachment
+            ? `\n\n## Conteudo do arquivo anexado "${textAttachment.name}":\n\`\`\`\n${textAttachment.extractedText}\n\`\`\``
+            : '';
+          // Menciona anexos nao-imagem sem extractedText
+          const otherAttachments = m.attachments.filter(
+            (a) => !a.dataUri && !a.extractedText,
+          );
+          const otherNote = otherAttachments.length > 0
+            ? `\n\n_Outros anexos salvos em disco (use as skills para processar): ${otherAttachments.map((a) => `${a.name} (${a.path})`).join(', ')}_`
+            : '';
+          contentParts.push({ type: 'text', text: m.content + textContext + otherNote });
+          return { role: 'user', content: contentParts };
+        }
+        // Sem imagem: injeta contexto no texto
+        let text = m.content;
+        const textAtt = m.attachments.find((a) => a.extractedText);
+        if (textAtt) {
+          text += `\n\n## Conteudo do arquivo "${textAtt.name}":\n\`\`\`\n${textAtt.extractedText}\n\`\`\``;
+        }
+        const others = m.attachments.filter((a) => !a.extractedText);
+        if (others.length > 0) {
+          text += `\n\n_Outros anexos salvos em disco: ${others.map((a) => `${a.name} (${a.path})`).join(', ')}_`;
+        }
+        return { role: 'user', content: text };
+      }
       return { role: m.role, content: m.content };
     });
   }

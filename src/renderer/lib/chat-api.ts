@@ -32,10 +32,21 @@ function detectCoreBaseUrl(): string {
 
 const CORE_BASE_URL = detectCoreBaseUrl();
 
+export interface ChatAttachment {
+  id: string;
+  path: string;
+  name: string;
+  mimeType: string;
+  sizeBytes: number;
+  dataUri?: string;
+  extractedText?: string;
+}
+
 export interface ChatInput {
   messages: Array<{
     role: 'user' | 'assistant' | 'system' | 'tool';
     content: string;
+    attachments?: ChatAttachment[];
   }>;
   model?: string;
   provider?: string;
@@ -202,5 +213,50 @@ export const chatApi = {
     } catch (err) {
       return { skills: [], count: 0, error: (err as Error).message };
     }
+  },
+
+  /**
+   * Upload de arquivo via POST /upload (multipart).
+   * Funciona em 2 modos:
+   *  - Browser: usa FormData + fetch direto (File vem de <input type="file">)
+   *  - Electron: delega via chatApi.pickAndUpload() (que abre dialog e ja retorna attachment)
+   *
+   * Retorna ChatAttachment com id, path, dataUri (se imagem <5MB), extractedText (PDF/TXT).
+   */
+  uploadFile: async (file: File | Blob, fileName?: string): Promise<ChatAttachment> => {
+    logMode();
+
+    // Modo browser: FormData + fetch direto
+    const form = new FormData();
+    const name = fileName || (file instanceof File ? file.name : 'arquivo');
+    form.append('file', file, name);
+
+    const res = await fetch(`${CORE_BASE_URL}/upload`, {
+      method: 'POST',
+      body: form,
+      // NAO setar Content-Type - o browser preenche com boundary
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Upload HTTP ${res.status}: ${text}`);
+    }
+    const data = await res.json() as { attachments: ChatAttachment[] };
+    if (!data.attachments || data.attachments.length === 0) {
+      throw new Error('Upload retornou sem attachments');
+    }
+    return data.attachments[0];
+  },
+
+  /**
+   * Modo Electron: pede pro main process abrir dialog.showOpenDialog, ler o arquivo
+   * e fazer upload. Retorna o ChatAttachment pronto.
+   * Em browser, retorna null (use input file + uploadFile()).
+   */
+  pickAndUpload: async (): Promise<ChatAttachment | null> => {
+    logMode();
+    if (hasIPC() && (window as any).kairos?.upload?.pickAndUpload) {
+      return await (window as any).kairos.upload.pickAndUpload();
+    }
+    return null;
   },
 };

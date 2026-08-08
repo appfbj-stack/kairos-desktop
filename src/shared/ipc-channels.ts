@@ -17,6 +17,10 @@ export const IPC = {
   SKILLS_EXECUTE: 'skills:execute',
   SKILLS_CREATE: 'skills:create',
 
+  // Upload
+  UPLOAD_FILE: 'upload:file',
+  UPLOAD_PICK: 'upload:pick',
+
   // Memory
   MEMORY_RECALL: 'memory:recall',
   MEMORY_STORE: 'memory:store',

@@ -12,6 +12,7 @@ import { registerLlmHandlers } from './llm.handler.js';
 import { registerSystemHandlers } from './system.handler.js';
 import { registerUpdateHandlers } from './updates.handler.js';
 import { registerAuditHandlers } from './audit.handler.js';
+import { registerUploadHandlers } from './upload.handler.js';
 
 export function registerIpcHandlers(): void {
   registerChatHandlers(ipcMain);
@@ -22,4 +23,5 @@ export function registerIpcHandlers(): void {
   registerSystemHandlers(ipcMain);
   registerUpdateHandlers(ipcMain);
   registerAuditHandlers(ipcMain);
+  registerUploadHandlers(ipcMain);
 }

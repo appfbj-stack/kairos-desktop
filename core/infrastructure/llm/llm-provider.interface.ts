@@ -38,6 +38,30 @@ export interface ChatMessage {
   toolCallId?: string;
   toolCalls?: ToolCall[];
   name?: string;
+  /**
+   * Anexos (imagens, PDFs, etc.) enviados pelo usuario.
+   * - Imagens: enviadas como multimodal (vision) se o modelo suportar
+   * - Texto/PDF: texto eh extraido e injetado no prompt automaticamente
+   * - Outros: apenas o path eh passado; LLM chama a skill adequada
+   */
+  attachments?: ChatAttachment[];
+}
+
+export interface ChatAttachment {
+  /** ID unico do upload (gerado no POST /upload) */
+  id: string;
+  /** Path absoluto do arquivo no filesystem do Core */
+  path: string;
+  /** Nome original do arquivo */
+  name: string;
+  /** MIME type (image/png, application/pdf, text/plain, ...) */
+  mimeType: string;
+  /** Tamanho em bytes */
+  sizeBytes: number;
+  /** Data URI (base64) - presente APENAS para imagens (vision) ou textos pequenos */
+  dataUri?: string;
+  /** Texto extraido (presente apos auto-extract de PDF/TXT/MD/JSON) */
+  extractedText?: string;
 }
 
 export interface ToolDefinition {

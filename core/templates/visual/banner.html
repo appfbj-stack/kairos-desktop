@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>{{title}}</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      width: 1080px;
+      height: 1350px;
+      font-family: 'Georgia', 'Times New Roman', serif;
+      background: #f5efe6;
+      color: #1a2540;
+      overflow: hidden;
+    }
+    .frame {
+      width: 100%;
+      height: 100%;
+      padding: 60px 50px 40px;
+      display: flex;
+      flex-direction: column;
+    }
+    .top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      font-family: 'Arial', sans-serif;
+      font-size: 22px;
+      font-weight: 700;
+      color: #1a2540;
+    }
+    .top .left { max-width: 50%; }
+    .top .right {
+      background: #1a2540;
+      color: #f5efe6;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 20px;
+      letter-spacing: 1px;
+    }
+    .title-wrap {
+      text-align: center;
+      margin: 30px 0 18px;
+    }
+    .title-prefix {
+      font-family: 'Arial', sans-serif;
+      font-size: 36px;
+      font-weight: 800;
+      color: #1a2540;
+      letter-spacing: 2px;
+    }
+    .title-main {
+      font-family: 'Georgia', serif;
+      font-size: 96px;
+      font-weight: 900;
+      color: #1a2540;
+      line-height: 1;
+      margin: 12px 0;
+      letter-spacing: 2px;
+    }
+    .title-secondary {
+      font-family: 'Georgia', serif;
+      font-size: 64px;
+      font-weight: 800;
+      color: #d4a017;
+      letter-spacing: 1px;
+    }
+    .verses {
+      font-family: 'Georgia', serif;
+      font-size: 22px;
+      font-style: italic;
+      color: #1a2540;
+      text-align: center;
+      max-width: 80%;
+      margin: 0 auto 20px;
+      line-height: 1.3;
+    }
+    .purpose {
+      text-align: center;
+      font-family: 'Arial', sans-serif;
+      font-size: 18px;
+      color: #1a2540;
+      margin: 0 0 10px;
+    }
+    .purpose strong { color: #d4a017; font-weight: 800; }
+    .dates {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 30px;
+      font-family: 'Arial', sans-serif;
+      font-size: 18px;
+      color: #1a2540;
+      margin: 8px 0 14px;
+    }
+    .dates .pill {
+      background: #d4a017;
+      color: #fff;
+      padding: 8px 18px;
+      border-radius: 6px;
+      font-weight: 700;
+    }
+    .desc {
+      text-align: center;
+      font-family: 'Arial', sans-serif;
+      font-size: 16px;
+      color: #1a2540;
+      max-width: 80%;
+      margin: 0 auto 18px;
+      line-height: 1.4;
+    }
+    .scale-title {
+      text-align: center;
+      font-family: 'Arial', sans-serif;
+      font-size: 28px;
+      font-weight: 800;
+      color: #fff;
+      background: #1a2540;
+      padding: 14px 30px;
+      border-radius: 50px;
+      width: fit-content;
+      margin: 14px auto;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .scale-table {
+      width: 100%;
+      background: #1a2540;
+      border-radius: 12px;
+      overflow: hidden;
+      margin-bottom: 18px;
+    }
+    .scale-row {
+      display: grid;
+      grid-template-columns: 220px 1fr 140px;
+      align-items: center;
+      padding: 16px 28px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+      color: #fff;
+      font-family: 'Arial', sans-serif;
+    }
+    .scale-row:last-child { border-bottom: none; }
+    .scale-row .day {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 18px;
+      font-weight: 700;
+    }
+    .scale-row .day .icon {
+      width: 32px;
+      height: 32px;
+      background: #d4a017;
+      border-radius: 6px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+    }
+    .scale-row .name {
+      font-size: 26px;
+      font-weight: 800;
+      text-align: center;
+    }
+    .scale-row .date {
+      font-size: 22px;
+      font-weight: 700;
+      text-align: right;
+      color: #d4a017;
+    }
+    .footer {
+      margin-top: auto;
+      text-align: center;
+      font-family: 'Arial', sans-serif;
+      font-size: 16px;
+      color: #1a2540;
+    }
+    .footer .label {
+      font-weight: 800;
+      letter-spacing: 2px;
+      color: #d4a017;
+      margin-bottom: 6px;
+    }
+    .footer .church {
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: 1px;
+    }
+    .footer .tagline {
+      font-size: 14px;
+      color: #1a2540;
+      font-style: italic;
+    }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <div class="top">
+      <div class="left">{{top_left}}</div>
+      <div class="right">{{top_right}}</div>
+    </div>
+
+    <div class="title-wrap">
+      <div class="title-prefix">{{title_prefix}}</div>
+      <div class="title-main">{{title_main}}</div>
+      <div class="title-secondary">{{title_secondary}}</div>
+    </div>
+
+    <div class="verses">{{verses}}</div>
+    <div class="purpose">PROPÓSITO: <strong>{{purpose}}</strong></div>
+
+    <div class="dates">
+      <span class="pill">DE {{date_start}}</span>
+      <span>até {{date_end}} ({{date_label}})</span>
+    </div>
+
+    <div class="desc">{{description}}</div>
+
+    <div class="scale-title">— {{scale_title}} —</div>
+
+    <div class="scale-table">
+      {{scale_rows}}
+    </div>
+
+    <div class="footer">
+      <div class="label">NOSSO PROPÓSITO</div>
+      <div class="church">{{church_name}}</div>
+      <div class="tagline">{{church_tagline}}</div>
+    </div>
+  </div>
+</body>
+</html>
