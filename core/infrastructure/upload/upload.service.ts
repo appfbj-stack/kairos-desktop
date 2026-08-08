@@ -20,7 +20,8 @@
  */
 
 import { randomBytes } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
+import { readFile, writeFile } from 'node:fs/promises';
 import { extname, isAbsolute, join, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import type { ChatAttachment } from '../llm/llm-provider.interface.js';
@@ -128,6 +129,7 @@ export class UploadService {
 
   constructor() {
     if (!existsSync(this.root)) {
+      // M3 fix: mkdirSync aqui e' aceitavel - e' one-time no startup
       mkdirSync(this.root, { recursive: true });
       logger.info({ root: this.root }, 'Uploads dir created');
     }
@@ -156,14 +158,17 @@ export class UploadService {
     }
 
     const dir = todayDir();
-    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    if (!existsSync(dir)) {
+      mkdirSync(dir, { recursive: true });
+    }
 
     const id = randomBytes(12).toString('hex');
     const safe = safeFilename(originalName);
     const filename = `${id}-${safe}`;
     const fullPath = join(dir, filename);
 
-    writeFileSync(fullPath, buffer);
+    // M3 fix: writeFile async (nao bloqueia event loop)
+    await writeFile(fullPath, buffer);
     logger.info({ id, path: fullPath, sizeBytes: buffer.length, mimeType, ownerId }, 'File saved');
 
     // Auto-extrair texto se for PDF/TXT/etc
@@ -256,7 +261,7 @@ export class UploadService {
         return await this.extractPdfText(filePath);
       }
       if (TEXT_MIMES.has(mimeType)) {
-        return this.extractPlainText(filePath);
+        return await this.extractPlainText(filePath);
       }
       return null;
     } catch (err) {
@@ -265,8 +270,9 @@ export class UploadService {
     }
   }
 
-  private extractPlainText(filePath: string): string {
-    const buf = readFileSync(filePath);
+  private async extractPlainText(filePath: string): Promise<string> {
+    // M3 fix: readFile async
+    const buf = await readFile(filePath);
     // Remove BOM se houver
     let text = buf.toString('utf-8');
     if (text.charCodeAt(0) === 0xfeff) text = text.slice(1);
@@ -280,7 +286,8 @@ export class UploadService {
     // pdf-parse v2+ expoe a classe PDFParse (API mudou).
     // Import dinamico para evitar carregar no boot do Core quando nao ha uploads.
     const { PDFParse } = await import('pdf-parse') as any;
-    const buf = readFileSync(filePath);
+    // M3 fix: readFile async
+    const buf = await readFile(filePath);
     const parser = new PDFParse({ data: new Uint8Array(buf) });
     try {
       const result = await parser.getText();

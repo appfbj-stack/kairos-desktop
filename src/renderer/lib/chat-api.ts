@@ -84,7 +84,7 @@ function logMode(): void {
 }
 
 /** Fetch direto pro Core (modo browser). */
-async function coreFetch(path: string, init?: RequestInit): Promise<any> {
+export async function coreFetch(path: string, init?: RequestInit): Promise<any> {
   const res = await fetch(`${CORE_BASE_URL}${path}`, {
     ...init,
     headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
@@ -94,6 +94,57 @@ async function coreFetch(path: string, init?: RequestInit): Promise<any> {
     throw new Error(`Core HTTP ${res.status}: ${text}`);
   }
   return res.json();
+}
+
+/**
+ * A3 fix: SSE real via fetch + ReadableStream.
+ * Le chunks do tipo `data: {json}\n\n` ate `[DONE]`.
+ * Junta todos os chunks e retorna o JSON final (mesmo shape do /chat/sync).
+ */
+async function coreSSE(path: string, input: unknown, timeoutMs = 120_000): Promise<any> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(`${CORE_BASE_URL}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+      body: JSON.stringify(input),
+      signal: controller.signal,
+    });
+    if (!res.ok || !res.body) {
+      throw new Error(`SSE HTTP ${res.status}`);
+    }
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let content = '';
+    const toolCalls: any[] = [];
+    const toolResults: any[] = [];
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith('data:')) continue;
+        const data = trimmed.slice(5).trim();
+        if (data === '[DONE]') continue;
+        try {
+          const chunk = JSON.parse(data);
+          if (chunk.type === 'content' && chunk.content) content += chunk.content;
+          else if (chunk.type === 'tool_call' && chunk.toolCall) toolCalls.push(chunk.toolCall);
+          else if (chunk.type === 'tool_result' && chunk.toolResult) toolResults.push(chunk.toolResult);
+        } catch {
+          // ignora chunks malformados
+        }
+      }
+    }
+    return { content, toolCalls, toolResults, provider: 'openrouter', model: 'sse' };
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export const chatApi = {
@@ -118,8 +169,9 @@ export const chatApi = {
   },
 
   /**
-   * Chat streaming simulado: o Core retorna tudo de uma vez (/chat/sync),
-   * o renderer quebra em chunks de 5 chars com pausa pra dar efeito "digitando".
+   * Chat streaming: tenta SSE real (POST /chat) e faz fallback para /chat/sync
+   * com chunks via fetch reader. A3 fix: removeu o setTimeout(22ms) simulado.
+   *
    * Se o LLM chamou tools, emite tool_call e tool_result chunks antes do content.
    */
   async *chatStream(input: ChatInput): AsyncIterable<ChatChunk> {
@@ -131,10 +183,15 @@ export const chatApi = {
       if (hasIPC()) {
         result = await (window as any).kairos.chat.send(input);
       } else {
-        result = await coreFetch('/chat/sync', {
-          method: 'POST',
-          body: JSON.stringify(input),
-        });
+        // Tenta SSE primeiro; se falhar (Core antigo), cai pra /chat/sync
+        try {
+          result = await coreSSE('/chat', input);
+        } catch {
+          result = await coreFetch('/chat/sync', {
+            method: 'POST',
+            body: JSON.stringify(input),
+          });
+        }
       }
     } catch (err) {
       yield { type: 'error', error: (err as Error).message };
@@ -156,13 +213,9 @@ export const chatApi = {
       yield { type: 'tool_result', content: tr.content, toolResult: tr } as any;
     }
 
-    // 3. Chunks do content final
+    // 3. Content (sem mais setTimeout artificial)
     if (text) {
-      const CHUNK_SIZE = 5;
-      for (let i = 0; i < text.length; i += CHUNK_SIZE) {
-        yield { type: 'content', content: text.slice(i, i + CHUNK_SIZE) };
-        await new Promise((r) => setTimeout(r, 22));
-      }
+      yield { type: 'content', content: text };
     } else {
       yield { type: 'error', error: 'Core retornou resposta sem content' };
       return;

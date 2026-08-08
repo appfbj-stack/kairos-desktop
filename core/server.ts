@@ -27,6 +27,7 @@ import { createConversationUseCase, addMessageUseCase, listConversationsUseCase,
 import { getMemoryRepository } from './infrastructure/memory/sqlite.repository.js';
 import { skillRegistry } from './skills/registry.js';
 import { uploadService, UploadError, getUploadsRoot } from './infrastructure/upload/upload.service.js';
+import { buildSystemPrompt } from './prompts/system-prompt.js';
 import { z } from 'zod';
 import type { ChatMessage, ToolDefinition } from './infrastructure/llm/llm-provider.interface.js';
 
@@ -327,6 +328,17 @@ export async function buildServer(): Promise<FastifyInstance> {
       })),
       count: skillRegistry.list().length,
     };
+  });
+
+  // C12 fix: endpoint para o frontend pegar o system prompt.
+  // Centraliza a lista de skills (vinda do registry) e o template.
+  app.get('/system/prompt', async (req) => {
+    const recalled = (req.query as { recalled?: string }).recalled || '';
+    const prompt = buildSystemPrompt({
+      skills: skillRegistry.list(),
+      recalledContext: recalled,
+    });
+    return { prompt, skillCount: skillRegistry.list().length };
   });
 
   // =====================================================

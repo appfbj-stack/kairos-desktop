@@ -11,6 +11,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useChatStore, type ChatMessage } from '../../store/chat.store.js';
 import { chatApi, type ChatAttachment } from '../../lib/chat-api.js';
+import { coreFetch } from '../../lib/chat-api.js';
 import { VoiceButton } from './VoiceButton.js';
 import { AttachmentPreview } from './AttachmentPreview.js';
 import './ChatPanel.css';
@@ -154,31 +155,16 @@ export function ChatPanel() {
     addMessage(convId, { id: assistantId, role: 'assistant', content: '', streaming: true });
     setStreaming(true);
 
-    let systemPrompt =
-      'Voce eh o Kairos, um assistente de IA para Windows. Responda em portugues do Brasil.\n\n' +
-      'Voce tem acesso a 15 tools do Windows:\n' +
-      '- file_manager_list(path, limit): lista arquivos/pastas em um diretorio\n' +
-      '- file_manager_read(path, maxBytes): le conteudo de arquivo texto (max 50KB)\n' +
-      '- search_files(pattern, path, recursive, limit): busca arquivos por nome\n' +
-      '- app_launcher_open(target): abre app, URL ou arquivo com programa padrao\n' +
-      '- clipboard_read(): le o clipboard atual\n' +
-      '- clipboard_write(text): escreve no clipboard\n' +
-      '- office_excel_read(path, sheet?, maxRows?): le planilha Excel via pure-Node (exceljs)\n' +
-      '- office_word_read(path, maxChars?): extrai texto de documento Word via pure-Node (mammoth)\n' +
-      '- pdf_convert(inputPath, outputPath?): converte DOCX/DOC/RTF/TXT/MD/XLSX para PDF via LibreOffice\n' +
-      '- browser_navigate(url?, query?): abre URL ou faz busca no Google\n' +
-      '- office_excel_write(path, operation, ...): ESCREVE em planilha Excel. operation=set_cell|add_row|add_header|create_sheet\n' +
-      '- office_word_write(templatePath, outputPath, replacements): preenche template Word com {{chave}}=valor\n' +
-      '- file_organize(sourceDir, action, ...): organiza arquivos. action=move_by_type|move_by_date|rename_pattern|dedupe|create_structure\n' +
-      '- generate_visual(type, outputDir, ...): gera PNG (banner vertical 1080x1350, card quadrado 1080x1080, ou carrossel multi-slide Instagram). Renderiza HTML via Chromium.\n' +
-      '- igreja_documento(mode, outputDir, ...): gera PDF de documento oficial da igreja. mode=carta|recibo|ata|dizimo. Use para carta de apresentacao/transferencia/recomendacao, recibo de dizimo/oferta, ata de reuniao, ou relatorio mensal de dizimos. Renderiza via Playwright -> PDF, nao precisa de Office.\n\n' +
-      'Sobre arquivos anexados pelo usuario:\n' +
-      '- Imagens sao enviadas como multimodal (voce VE a imagem)\n' +
-      '- PDF e texto (TXT/MD/JSON/HTML) tem o texto extraido e injetado no contexto\n' +
-      '- Outros formatos (xlsx, docx, zip) vem com o path no disco; use a skill apropriada (office_excel_read, file_manager_read, etc.) para processar\n\n' +
-      'Para operacoes de escrita (excel_write, word_write, file_organize), sempre faca dryRun primeiro se o usuario nao tiver certeza.\n\n' +
-      'Use-as quando o usuario pedir algo do PC. Seja direto, sem enrolacao. ' +
-      'Quando precisar de varias tools, chame em sequencia (o sistema executa e devolve o resultado).';
+    // C12 fix: system prompt agora vem do Core (centralizado em core/prompts/system-prompt.ts).
+    // Aqui so chamamos o endpoint /system/prompt com a lista de skills.
+    let systemPrompt = '';
+    try {
+      const promptResp = await coreFetch('/system/prompt');
+      systemPrompt = promptResp.prompt || '';
+    } catch (err) {
+      // Fallback minimo se o endpoint falhar
+      systemPrompt = 'Voce eh o Kairos, um assistente de IA para Windows. Responda em portugues do Brasil.';
+    }
     try {
       const recalled = await chatApi.recall(text, 3);
       if (recalled.context) {
