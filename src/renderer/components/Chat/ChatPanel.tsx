@@ -63,7 +63,21 @@ export function ChatPanel() {
     addMessage(convId, { id: assistantId, role: 'assistant', content: '', streaming: true });
     setStreaming(true);
 
-    let systemPrompt = 'Voce eh o Kairos, um assistente de IA para Windows. Responda em portugues do Brasil. Voce tem acesso a tools do Windows (listar arquivos, ler arquivos, abrir apps, buscar arquivos). Use-as quando o usuario pedir algo do PC.';
+    let systemPrompt =
+      'Voce eh o Kairos, um assistente de IA para Windows. Responda em portugues do Brasil.\n\n' +
+      'Voce tem acesso a 10 tools do Windows:\n' +
+      '- file_manager_list(path, limit): lista arquivos/pastas em um diretorio\n' +
+      '- file_manager_read(path, maxBytes): le conteudo de arquivo texto (max 50KB)\n' +
+      '- search_files(pattern, path, recursive, limit): busca arquivos por nome\n' +
+      '- app_launcher_open(target): abre app, URL ou arquivo com programa padrao\n' +
+      '- clipboard_read(): le o clipboard atual\n' +
+      '- clipboard_write(text): escreve no clipboard\n' +
+      '- office_excel_read(path, sheet?, maxRows?): le planilha Excel via COM\n' +
+      '- office_word_read(path, maxChars?): extrai texto de documento Word via COM\n' +
+      '- pdf_convert(inputPath, outputPath?): converte DOCX/DOC/RTF/TXT/MD/XLSX para PDF\n' +
+      '- browser_navigate(url?, query?): abre URL ou faz busca no Google\n\n' +
+      'Use-as quando o usuario pedir algo do PC. Seja direto, sem enrolacao. ' +
+      'Quando precisar de varias tools, chame em sequencia (o sistema executa e devolve o resultado).';
     try {
       const recalled = await chatApi.recall(text, 3);
       if (recalled.context) {

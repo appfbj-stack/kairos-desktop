@@ -8,15 +8,28 @@ import { checkSafety } from './safety.js';
 import { fileManagerList, fileManagerRead } from './builtin/file-manager.js';
 import { appLauncherOpen } from './builtin/app-launcher.js';
 import { searchFiles } from './builtin/search.js';
+import { clipboardRead, clipboardWrite } from './builtin/clipboard.js';
+import { officeExcelRead } from './builtin/office-excel.js';
+import { officeWordRead } from './builtin/office-word.js';
+import { pdfConvert } from './builtin/pdf-converter.js';
+import { browserNavigate } from './builtin/browser-navigate.js';
 
 // Re-export para conveniência
 export type { Skill, JsonSchema } from './types.js';
 
 const builtinSkills: Skill[] = [
+  // Fase 4 MVP - read-only
   fileManagerList,
   fileManagerRead,
   appLauncherOpen,
   searchFiles,
+  // Fase 4.1 - 5 skills adicionais
+  clipboardRead,
+  clipboardWrite,
+  officeExcelRead,
+  officeWordRead,
+  pdfConvert,
+  browserNavigate,
 ];
 
 class SkillRegistry {
