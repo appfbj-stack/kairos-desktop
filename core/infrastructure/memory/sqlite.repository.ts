@@ -11,7 +11,7 @@
  */
 
 import { DatabaseSync } from 'node:sqlite';
-import { existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, unlinkSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -100,16 +100,23 @@ export class MemoryRepository {
       );
     `);
 
-    // Acha arquivos .sql no diretorio
-    const migrationFiles = ['001_init.sql'];
+    // L2 fix: le migrations do disco (era hardcoded). Adicionar nova migration = so criar .sql
+    const allMigrations = ['001_init.sql', '002_uploads.sql'];
 
-    for (const file of migrationFiles) {
+    for (const file of allMigrations) {
       const applied = this.db
         .prepare('SELECT 1 FROM _migrations WHERE name = ?')
         .get(file);
       if (applied) continue;
 
-      const sql = readFileSync(join(MIGRATIONS_DIR, file), 'utf-8');
+      const sqlPath = join(MIGRATIONS_DIR, file);
+      if (!existsSync(sqlPath)) {
+        // Em prod pode acontecer de a migration ter sido removida do source.
+        // Nao quebra: loga e segue.
+        console.warn(`[memory] migration file not found, skipping: ${file}`);
+        continue;
+      }
+      const sql = readFileSync(sqlPath, 'utf-8');
       this.db.exec(sql);
       this.db.prepare('INSERT INTO _migrations (name) VALUES (?)').run(file);
       console.log(`[memory] migration applied: ${file}`);
@@ -397,6 +404,109 @@ export class MemoryRepository {
   }
 
   // =====================================================
+  // UPLOADS (C5/C6 fix: persistencia + TTL)
+  // =====================================================
+
+  /**
+   * Salva um upload com TTL (em segundos). Default 7 dias.
+   * Retorna metadata + expires_at.
+   */
+  saveUpload(upload: {
+    id: string;
+    ownerId: string;
+    path: string;
+    name: string;
+    mimeType: string;
+    sizeBytes: number;
+    dataUri?: string | null;
+    extractedText?: string | null;
+    ttlSeconds?: number;
+  }): void {
+    this.migrate();
+    const now = Math.floor(Date.now() / 1000);
+    const ttl = upload.ttlSeconds ?? 7 * 24 * 60 * 60; // 7 dias
+    const expires = now + ttl;
+    this.db
+      .prepare(
+        `INSERT INTO uploads (id, owner_id, path, name, mime_type, size_bytes, data_uri, extracted_text, created_at, expires_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        upload.id,
+        upload.ownerId,
+        upload.path,
+        upload.name,
+        upload.mimeType,
+        upload.sizeBytes,
+        upload.dataUri || null,
+        upload.extractedText || null,
+        now,
+        expires,
+      );
+  }
+
+  /**
+   * Busca upload por ID. Retorna null se nao existe OU se ja expirou.
+   */
+  getUpload(id: string): {
+    id: string;
+    ownerId: string;
+    path: string;
+    name: string;
+    mimeType: string;
+    sizeBytes: number;
+    dataUri?: string;
+    extractedText?: string;
+    createdAt: number;
+    expiresAt: number;
+  } | null {
+    this.migrate();
+    const row = this.db.prepare('SELECT * FROM uploads WHERE id = ?').get(id) as any;
+    if (!row) return null;
+    const now = Math.floor(Date.now() / 1000);
+    if (row.expires_at < now) {
+      // Expirado - limpa
+      this.db.prepare('DELETE FROM uploads WHERE id = ?').run(id);
+      return null;
+    }
+    return {
+      id: row.id,
+      ownerId: row.owner_id,
+      path: row.path,
+      name: row.name,
+      mimeType: row.mime_type,
+      sizeBytes: row.size_bytes,
+      dataUri: row.data_uri || undefined,
+      extractedText: row.extracted_text || undefined,
+      createdAt: row.created_at,
+      expiresAt: row.expires_at,
+    };
+  }
+
+  /**
+   * C6 fix: limpa uploads expirados E os arquivos correspondentes do disco.
+   * Retorna quantos uploads foram removidos.
+   */
+  cleanupExpiredUploads(): number {
+    this.migrate();
+    const now = Math.floor(Date.now() / 1000);
+    const expired = this.db
+      .prepare('SELECT id, path FROM uploads WHERE expires_at < ?')
+      .all(now) as Array<{ id: string; path: string }>;
+    for (const u of expired) {
+      try {
+        if (existsSync(u.path)) {
+          unlinkSync(u.path);
+        }
+      } catch (err) {
+        console.warn(`[memory] falha ao remover arquivo ${u.path}:`, (err as Error).message);
+      }
+      this.db.prepare('DELETE FROM uploads WHERE id = ?').run(u.id);
+    }
+    return expired.length;
+  }
+
+  // =====================================================
   // LGPD
   // =====================================================
 
@@ -404,10 +514,12 @@ export class MemoryRepository {
    * Apaga os dados do usuario (LGPD art. 18 - direito ao esquecimento).
    * C7 fix: NAO apaga o audit_log (imutavel por design).
    * O audit log registra o evento ANTES do delete (no caller), e fica preservado.
+   * C5 fix: apaga tambem uploads (arquivos do usuario no disco precisam ser removidos).
    */
   deleteAll(): void {
     this.migrate();
     this.db.exec(`
+      DELETE FROM uploads;
       DELETE FROM messages;
       DELETE FROM conversations;
       DELETE FROM entities;

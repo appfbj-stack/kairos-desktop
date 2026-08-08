@@ -13,6 +13,8 @@ const CORE_PORT = Number(process.env.KAIROS_PORT || 4096);
 const CORE_BASE_URL = `http://127.0.0.1:${CORE_PORT}`;
 
 let isReady = false;
+// C11 fix: declarado no escopo do modulo (era referenciado mas nao existia, quebraria stopCore()).
+let coreProcess: { kill: () => void } | null = null;
 
 export async function startCore(): Promise<void> {
   // No dev, o Core ja esta rodando. Apenas verifica.
@@ -75,9 +77,20 @@ export const kairosCore = {
     }
   },
 
-  cancelChat: async (_id: string) => ({ cancelled: true }),
+  // A2 fix: cancelChat e getHistory sao stubs. Em prod devem chamar
+  // endpoints do Core. Por enquanto documentado.
+  cancelChat: async (_id: string) => {
+    logger.warn('cancelChat: ainda nao implementado no Core - ignorar');
+    return { cancelled: false, reason: 'not-implemented' };
+  },
 
-  getHistory: async (_id: string) => ({ messages: [] }),
+  getHistory: async (id: string) => {
+    try {
+      return await fetchJson(`/memory/conversations/${id}/messages`);
+    } catch {
+      return { messages: [] };
+    }
+  },
 
   listSkills: () => fetchJson('/skills/list').catch(() => []),
 
@@ -92,6 +105,14 @@ export const kairosCore = {
 
   listProviders: () => fetchJson('/llm/providers').catch(() => ({ providers: [] })),
   listModels: (provider: string) => fetchJson(`/llm/models?provider=${provider}`).catch(() => ({ models: [] })),
-  getSettings: () => Promise.resolve({}),
-  setSetting: (_k: string, _v: unknown) => Promise.resolve({ ok: true }),
+  // A7 fix: getSettings e setSetting ainda sao stubs (Core nao tem /system endpoints).
+  // Marcados explicitamente como nao implementados.
+  getSettings: () => {
+    logger.warn('getSettings: endpoint /system/settings ainda nao existe no Core');
+    return Promise.resolve({});
+  },
+  setSetting: (_k: string, _v: unknown) => {
+    logger.warn('setSetting: endpoint /system/settings ainda nao existe no Core');
+    return Promise.resolve({ ok: false, reason: 'not-implemented' });
+  },
 };

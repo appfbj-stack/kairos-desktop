@@ -95,9 +95,26 @@ export async function buildServer(): Promise<FastifyInstance> {
     },
   });
 
-  // CORS para dev local (Vite em 5173 chama Core em 4096) e prod (mesmo host)
+  // C9 fix: CORS restrito a origens conhecidas.
+  // Dev local (Vite 5173/5174), Electron (file:// ou electron://), e o proprio dominio prod.
+  // Sem isso, qualquer site no browser do user pode chamar o Core.
+  const ALLOWED_ORIGINS = [
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+    'http://localhost:5174',
+    'http://127.0.0.1:5174',
+    'https://kairosdesktop.fbautomacao.space',
+    'http://localhost:4098', // core servindo UI em prod
+  ];
   await app.register(import('@fastify/cors'), {
-    origin: true,
+    origin: (origin, cb) => {
+      // Sem header Origin (Electron, curl) = permite
+      if (!origin) return cb(null, true);
+      // file:// (renderer do Electron) = permite
+      if (origin.startsWith('file://')) return cb(null, true);
+      if (ALLOWED_ORIGINS.includes(origin)) return cb(null, true);
+      return cb(new Error(`CORS: origem bloqueada: ${origin}`), false);
+    },
     credentials: true,
   });
 

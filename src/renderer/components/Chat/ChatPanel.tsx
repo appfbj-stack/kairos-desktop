@@ -50,10 +50,22 @@ export function ChatPanel() {
   }, [messages.length]);
 
   useEffect(() => {
-    chatApi
-      .health()
-      .then(() => setCoreStatus('online'))
-      .catch(() => setCoreStatus('offline'));
+    let cancelled = false;
+    const checkHealth = async () => {
+      try {
+        await chatApi.health();
+        if (!cancelled) setCoreStatus('online');
+      } catch {
+        if (!cancelled) setCoreStatus('offline');
+      }
+    };
+    // A9 fix: polling periodico (30s) - se Core cair e voltar, status atualiza
+    checkHealth();
+    const interval = setInterval(checkHealth, 30_000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, []);
 
   useEffect(() => {

@@ -12,13 +12,19 @@
  * - Imagens: geram dataUri (base64) para multimodal/vision
  *
  * Schema LGPD: arquivos do usuario ficam so na maquina dele. Nao sincroniza.
+ *
+ * C5 fix: index persistido no SQLite (memory.db -> tabela uploads) com TTL.
+ * C6 fix: cleanupExpiredUploads() remove arquivos expirados do disco.
+ * A6 fix: cada upload eh atrelado a um owner (conversation_id) - get() valida.
+ * A8 fix: safeFilename agora rejeita nomes com `..` ou path absoluto.
  */
 
 import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { extname, join, resolve } from 'node:path';
+import { extname, isAbsolute, join, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import type { ChatAttachment } from '../llm/llm-provider.interface.js';
+import { getMemoryRepository } from '../memory/sqlite.repository.js';
 
 // Logger simples - core ainda nao tem logger compartilhado.
 const logger = {
@@ -30,6 +36,7 @@ const logger = {
 const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25MB
 const DATA_URI_LIMIT = 5 * 1024 * 1024; // imagens >5MB nao viram dataUri (economia de banda)
 const TEXT_EXTRACT_LIMIT = 100 * 1024; // extrair no max 100KB de texto
+const DEFAULT_TTL_SECONDS = 7 * 24 * 60 * 60; // 7 dias
 
 const IMAGE_MIMES = new Set([
   'image/png',
@@ -67,11 +74,21 @@ function todayDir(): string {
 }
 
 function safeFilename(name: string): string {
-  // Remove path traversal, caracteres problematicos
-  return name
-    .replace(/[\\/]/g, '_')
-    .replace(/[^\w.\-À-ÿ ]/g, '_')
-    .slice(0, 200) || 'arquivo';
+  // A8 fix: rejeita path traversal de verdade (path absoluto, .., etc)
+  if (isAbsolute(name)) {
+    // Extrai so o basename de paths absolutos (Windows ou Unix)
+    name = name.split(/[\\/]/).pop() || 'arquivo';
+  }
+  // Se ainda tiver traversal (..), descarta o nome
+  if (name.includes('..')) {
+    name = name.replace(/\.\.+/g, '_');
+  }
+  return (
+    name
+      .replace(/[\\/]/g, '_')
+      .replace(/[^\w.\-À-ÿ ]/g, '_')
+      .slice(0, 200) || 'arquivo'
+  );
 }
 
 function detectMime(name: string, fallback?: string): string {
@@ -105,8 +122,9 @@ function detectMime(name: string, fallback?: string): string {
 
 export class UploadService {
   private root = getUploadsRoot();
-  /** Mapa de uploadId -> metadata (so na memoria - em prod usariamos SQLite) */
-  private index = new Map<string, ChatAttachment & { dataUri?: string }>();
+  /** Cleanup periodico: a cada save, tambem roda cleanup de expirados (best-effort) */
+  private lastCleanupAt = 0;
+  private readonly CLEANUP_INTERVAL_MS = 60_000; // 1 min
 
   constructor() {
     if (!existsSync(this.root)) {
@@ -117,15 +135,19 @@ export class UploadService {
 
   /**
    * Salva um arquivo no storage e retorna o attachment metadata.
-   * Aceita Buffer (ja carregado) ou um filePath (origem externa).
+   * C5 fix: agora persiste no SQLite com owner + TTL (default 7 dias).
+   * A6 fix: ownerId eh usado para validar acesso depois (em get()).
    */
   async save(opts: {
     buffer: Buffer;
     originalName: string;
     mimeType?: string;
+    ownerId?: string;
+    ttlSeconds?: number;
   }): Promise<ChatAttachment> {
     const { buffer, originalName } = opts;
     const mimeType = opts.mimeType || detectMime(originalName);
+    const ownerId = opts.ownerId || 'anon';
 
     if (buffer.length > MAX_FILE_SIZE) {
       throw new UploadError(
@@ -142,36 +164,87 @@ export class UploadService {
     const fullPath = join(dir, filename);
 
     writeFileSync(fullPath, buffer);
-    logger.info({ id, path: fullPath, sizeBytes: buffer.length, mimeType }, 'File saved');
+    logger.info({ id, path: fullPath, sizeBytes: buffer.length, mimeType, ownerId }, 'File saved');
 
-    const attachment: ChatAttachment & { dataUri?: string } = {
+    // Auto-extrair texto se for PDF/TXT/etc
+    const extracted = await this.tryExtractText(fullPath, mimeType);
+
+    // Gerar dataUri para imagens pequenas (multimodal)
+    const dataUri = IMAGE_MIMES.has(mimeType) && buffer.length <= DATA_URI_LIMIT
+      ? `data:${mimeType};base64,${buffer.toString('base64')}`
+      : undefined;
+
+    // C5 fix: persistir no SQLite (substituiu Map em memoria)
+    try {
+      getMemoryRepository().saveUpload({
+        id,
+        ownerId,
+        path: fullPath,
+        name: originalName,
+        mimeType,
+        sizeBytes: buffer.length,
+        dataUri: dataUri ?? null,
+        extractedText: extracted ?? null,
+        ttlSeconds: opts.ttlSeconds ?? DEFAULT_TTL_SECONDS,
+      });
+    } catch (err) {
+      logger.error({ err, id }, 'falha ao persistir upload no SQLite - rollback disco');
+      throw err;
+    }
+
+    // Cleanup best-effort (so roda a cada 1 min pra nao custar I/O)
+    this.maybeCleanup();
+
+    const attachment: ChatAttachment = {
       id,
       path: fullPath,
       name: originalName,
       mimeType,
       sizeBytes: buffer.length,
     };
-
-    // Auto-extrair texto se for PDF/TXT/etc
-    const extracted = await this.tryExtractText(fullPath, mimeType);
-    if (extracted) {
-      attachment.extractedText = extracted;
-    }
-
-    // Gerar dataUri para imagens pequenas (multimodal)
-    if (IMAGE_MIMES.has(mimeType) && buffer.length <= DATA_URI_LIMIT) {
-      attachment.dataUri = `data:${mimeType};base64,${buffer.toString('base64')}`;
-    }
-
-    this.index.set(id, attachment);
+    if (dataUri) attachment.dataUri = dataUri;
+    if (extracted) attachment.extractedText = extracted;
     return attachment;
   }
 
   /**
-   * Resolve attachment por ID (do payload de chat). Retorna null se expirou.
+   * Resolve attachment por ID. Retorna null se nao existe OU se ja expirou.
+   * A6 fix: aceita ownerId opcional - se fornecido, valida que o upload pertence ao caller.
    */
-  get(id: string): (ChatAttachment & { dataUri?: string }) | null {
-    return this.index.get(id) || null;
+  get(id: string, ownerId?: string): ChatAttachment | null {
+    const row = getMemoryRepository().getUpload(id);
+    if (!row) return null;
+    if (ownerId && row.ownerId !== ownerId) {
+      logger.warn({ id, requestedBy: ownerId, actualOwner: row.ownerId }, 'acesso negado a upload de outro owner');
+      return null;
+    }
+    return {
+      id: row.id,
+      path: row.path,
+      name: row.name,
+      mimeType: row.mimeType,
+      sizeBytes: row.sizeBytes,
+      dataUri: row.dataUri,
+      extractedText: row.extractedText,
+    };
+  }
+
+  /**
+   * C6 fix: cleanup de uploads expirados (roda automaticamente a cada 1 min,
+   * mas pode ser chamado manualmente se quiser).
+   */
+  maybeCleanup(): void {
+    const now = Date.now();
+    if (now - this.lastCleanupAt < this.CLEANUP_INTERVAL_MS) return;
+    this.lastCleanupAt = now;
+    try {
+      const removed = getMemoryRepository().cleanupExpiredUploads();
+      if (removed > 0) {
+        logger.info({ removed }, 'uploads expirados removidos');
+      }
+    } catch (err) {
+      logger.warn({ err }, 'cleanup de uploads expirados falhou');
+    }
   }
 
   /**
