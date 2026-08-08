@@ -1,0 +1,51 @@
+# Kairos Core - Dockerfile (multi-stage)
+# Build: docker build -f Dockerfile.core -t kairos-core .
+# Run:   docker run -p 4098:4098 --env-file .env kairos-core
+
+# ============ STAGE 1: Build core (TS) + renderer (Vite) ============
+FROM node:20-alpine AS builder
+WORKDIR /app
+
+# Deps do root (Fastify, openai, sqlite, etc.)
+COPY package.json package-lock.json* ./
+RUN npm install --no-audit --no-fund
+
+# Build core (TS -> dist/core/)
+COPY core ./core
+COPY tsconfig.core.json ./
+RUN npx tsc -p tsconfig.core.json
+
+# Build renderer (Vite -> dist/renderer/)
+COPY src/renderer ./src/renderer
+COPY src/shared ./src/shared
+COPY vite.config.ts ./
+COPY tsconfig.json ./
+COPY index.html ./
+RUN npx vite build
+
+# ============ STAGE 2: Runtime ============
+FROM node:20-alpine AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+
+# Instala só prod deps (mais leve)
+COPY package.json package-lock.json* ./
+RUN npm install --omit=dev --no-audit --no-fund
+
+# Copia o build do stage anterior
+COPY --from=builder /app/dist ./dist
+
+# Volume para SQLite (persiste entre deploys)
+RUN mkdir -p /app/data
+VOLUME ["/app/data"]
+
+ENV KAIROS_HOST=0.0.0.0
+ENV KAIROS_PORT=4098
+ENV KAIROS_DB_PATH=/app/data/kairos.db
+ENV KAIROS_STATIC_DIR=/app/dist/renderer
+
+EXPOSE 4098
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:4098/health || exit 1
+
+CMD ["node", "dist/core/server.js"]

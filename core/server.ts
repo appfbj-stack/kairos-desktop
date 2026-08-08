@@ -15,6 +15,8 @@
  */
 
 import Fastify, { type FastifyInstance } from 'fastify';
+import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { invokeLLMUseCase } from './application/llm/invoke-llm.usecase.js';
 import { listProvidersUseCase } from './application/llm/select-model.usecase.js';
 import { storeEntityUseCase, StoreEntityInputSchema } from './application/memory/store-entity.usecase.js';
@@ -74,9 +76,9 @@ export async function buildServer(): Promise<FastifyInstance> {
     },
   });
 
-  // CORS para dev local (Vite em 5173 chama Core em 4096)
+  // CORS para dev local (Vite em 5173 chama Core em 4096) e prod (mesmo host)
   await app.register(import('@fastify/cors'), {
-    origin: ['http://localhost:5173', 'http://127.0.0.1:5173'],
+    origin: true,
     credentials: true,
   });
 
@@ -87,6 +89,34 @@ export async function buildServer(): Promise<FastifyInstance> {
     version: '0.1.0',
     timestamp: new Date().toISOString(),
   }));
+
+  // ---------- Static (UI build) ----------
+  // Quando rodando standalone (VPS ou dev sem Electron), serve o frontend Vite build.
+  // Em dev (npm run dev), o Vite dev server em :5173 que serve a UI.
+  const staticRoot = process.env.KAIROS_STATIC_DIR
+    ? resolve(process.env.KAIROS_STATIC_DIR)
+    : resolve(__dirname, '..', 'renderer');
+
+  if (existsSync(staticRoot)) {
+    await app.register(import('@fastify/static'), {
+      root: staticRoot,
+      prefix: '/',
+      decorateReply: false,
+    });
+    // SPA fallback: qualquer GET que nao foi rota da API retorna index.html
+    app.setNotFoundHandler((req, reply) => {
+      if (req.url.startsWith('/api/') || req.url.startsWith('/chat/') ||
+          req.url.startsWith('/llm/') || req.url.startsWith('/memory/') ||
+          req.url.startsWith('/skills/') || req.url.startsWith('/system/') ||
+          req.url === '/health') {
+        return reply.code(404).send({ error: 'Not found' });
+      }
+      return reply.sendFile('index.html');
+    });
+    app.log.info({ staticRoot }, 'Serving UI from static dir');
+  } else {
+    app.log.warn({ staticRoot }, 'Static dir not found - UI not served (use Vite dev server)');
+  }
 
   // ---------- List providers ----------
   app.get('/llm/providers', async () => {

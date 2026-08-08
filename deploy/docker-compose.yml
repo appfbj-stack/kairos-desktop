@@ -39,6 +39,37 @@ services:
     networks:
       - kairos-net
 
+  # kairos-core: API + UI (serve dist/renderer/ via fastify static)
+  kairos-core:
+    build:
+      context: ..
+      dockerfile: Dockerfile.core
+    image: kairos-core:latest
+    container_name: kairos-core
+    restart: unless-stopped
+    ports:
+      - "4098:4098"
+    env_file:
+      - ../.env.production
+    environment:
+      - NODE_ENV=production
+      - KAIROS_HOST=0.0.0.0
+      - KAIROS_PORT=4098
+      - KAIROS_DB_PATH=/app/data/kairos.db
+      - KAIROS_STATIC_DIR=/app/dist/renderer
+    volumes:
+      - kairos-data:/app/data
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4098/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks:
+      - kairos-net
+    depends_on:
+      - update-server
+
   # Caddy reverse proxy (opcional - Dokploy ja tem Caddy nativo)
   # Descomente se preferir proxy interno
   # caddy:
@@ -60,6 +91,8 @@ services:
 volumes:
   update-downloads:
     name: kairos-update-downloads
+  kairos-data:
+    name: kairos-data
   # caddy_data:
   # caddy_config:
 
