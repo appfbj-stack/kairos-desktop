@@ -16,6 +16,7 @@ import { officeWordWrite } from './builtin/office-word-write.js';
 import { fileOrganize } from './builtin/file-organize.js';
 import { generateVisual } from './builtin/generate-visual.js';
 import { igrejaDocumento } from './builtin/igreja-documento.js';
+import { imageAiGenerator } from './builtin/image-ai-generator.js';
 import { pdfConvert } from './builtin/pdf-converter.js';
 import { browserNavigate } from './builtin/browser-navigate.js';
 
@@ -43,6 +44,8 @@ const builtinSkills: Skill[] = [
   generateVisual,
   // Fase 4.4 - documentos oficiais da igreja (carta, recibo, ata, dizimo) via Playwright -> PDF
   igrejaDocumento,
+  // Fase 4.5 - gerar imagem via IA multimodal (OpenSquad image-ai-generator port)
+  imageAiGenerator,
 ];
 
 class SkillRegistry {
