@@ -179,16 +179,28 @@ export class MemoryRepository {
 
   searchEntities(query: string, limit = 20): Entity[] {
     this.migrate();
-    const rows = this.db
-      .prepare(
-        `SELECT e.* FROM entities e
-         JOIN entities_fts fts ON fts.rowid = e.rowid
-         WHERE entities_fts MATCH ?
-         ORDER BY rank
-         LIMIT ?`,
-      )
-      .all(query, limit) as any[];
-    return rows.map((r) => this.mapEntity(r));
+    // Sanitiza o query pra FTS5: wrap cada palavra em aspas duplas
+    // (string literal no FTS5, escapa caracteres especiais do usuario)
+    const safeQuery = sanitizeFtsQuery(query);
+    if (!safeQuery) return [];
+    try {
+      const rows = this.db
+        .prepare(
+          `SELECT e.* FROM entities e
+           JOIN entities_fts fts ON fts.rowid = e.rowid
+           WHERE entities_fts MATCH ?
+           ORDER BY rank
+           LIMIT ?`,
+        )
+        .all(safeQuery, limit) as any[];
+      return rows.map((r) => this.mapEntity(r));
+    } catch (err) {
+      // Se mesmo assim der erro de FTS5, retorna vazio em vez de crashar
+      // (a request do chat continua sem contexto, mas nao quebra)
+      // eslint-disable-next-line no-console
+      console.warn('[memory] FTS5 query falhou, retornando vazio:', (err as Error).message);
+      return [];
+    }
   }
 
   deleteEntity(id: string): void {
@@ -429,4 +441,30 @@ export function getMemoryRepository(): MemoryRepository {
     _instance.migrate();
   }
   return _instance;
+}
+
+/**
+ * Sanitiza query para FTS5: wrap cada palavra em aspas duplas.
+ *
+ * FTS5 trata `:` `,` `"` `*` `(` `)` etc. como sintaxe especial. Sem sanitizar,
+ * queries como "C:\Users" dao "fts5: syntax error near ':'". Ao wrap cada token
+ * em aspas duplas, viram string literals e o FTS5 busca como texto exato.
+ *
+ * Aspas duplas internas sao escapadas como "" (convenção FTS5).
+ */
+export function sanitizeFtsQuery(query: string): string {
+  if (!query) return '';
+  const tokens = query
+    .split(/\s+/)
+    .map((t) => t.trim())
+    .filter(Boolean);
+  if (tokens.length === 0) return '';
+  return tokens
+    .map((t) => {
+      // Escapa aspas duplas internas
+      const escaped = t.replace(/"/g, '""');
+      // Wrap em aspas duplas = string literal no FTS5
+      return `"${escaped}"`;
+    })
+    .join(' ');
 }

@@ -13,7 +13,8 @@
 export interface ModelInfo {
   id: string;
   displayName: string;
-  provider: string;
+  /** Provider id (openrouter, openai, anthropic, ollama). Injetado pelo factory se omitido. */
+  provider?: string;
   contextWindow: number;
   supportsTools: boolean;
   supportsVision: boolean;

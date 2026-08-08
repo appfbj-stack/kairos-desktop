@@ -3,14 +3,14 @@
  * expõe metadados no formato OpenAI function calling.
  */
 
-import type { Skill, JsonSchema, SkillResult } from './types.js';
+import type { Skill, JsonSchema } from './types.js';
 import { checkSafety } from './safety.js';
 import { fileManagerList, fileManagerRead } from './builtin/file-manager.js';
 import { appLauncherOpen } from './builtin/app-launcher.js';
 import { searchFiles } from './builtin/search.js';
 
 // Re-export para conveniência
-export type { Skill, JsonSchema, SkillResult } from './types.js';
+export type { Skill, JsonSchema } from './types.js';
 
 const builtinSkills: Skill[] = [
   fileManagerList,
@@ -44,15 +44,14 @@ class SkillRegistry {
   }
 
   /**
-   * Retorna as skills no formato ToolDefinition (sem wrapper OpenAI).
+   * Retorna as skills no formato ToolDefinition-like (sem wrapper OpenAI).
    * O adapter (mapTools) faz o wrapping para OpenAI.
+   *
+   * Retorna um array com shape de ToolDefinition (name, description, parameters)
+   * mas mantendo o tipo Skill[] (com category e execute) para o caller.
    */
   asToolDefinitions(): Skill[] {
-    return this.list().map((s) => ({
-      name: s.name,
-      description: s.description,
-      parameters: s.parameters,
-    }));
+    return this.list();
   }
 
   /**

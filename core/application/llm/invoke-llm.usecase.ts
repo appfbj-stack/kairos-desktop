@@ -17,7 +17,7 @@ import type {
 } from '../../infrastructure/llm/llm-provider.interface.js';
 import { llmRouter } from '../../infrastructure/llm/router.js';
 import { ProviderError } from '../../domain/errors/domain.error.js';
-import { skillRegistry, type SkillResult } from '../../skills/registry.js';
+import { skillRegistry } from '../../skills/registry.js';
 
 export interface InvokeLLMInput {
   messages: ChatMessage[];
@@ -136,9 +136,9 @@ export class InvokeLLMUseCase {
 
         // Executa a skill
         const result = await skillRegistry.execute(tc.name, tc.arguments);
-        const toolResultText = result.ok
-          ? result.content
-          : `Erro: ${result.error}`;
+        const toolResultText = result.ok === true
+          ? (result as { content: string }).content
+          : `Erro: ${(result as { error: string }).error}`;
 
         // Salva no historico (para enviar de volta pro LLM)
         allToolCalls.push({

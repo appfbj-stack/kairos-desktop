@@ -40,6 +40,10 @@ export interface OpenAICompatibleConfig {
 export function createOpenAICompatibleAdapter(config: OpenAICompatibleConfig): LLMProvider {
   const { id, displayName, baseUrl, apiKeyEnvVar, models, defaultHeaders, transformRequest, transformChunk } = config;
 
+  // Injeta o campo `provider` em cada model se nao estiver setado.
+  // Evita ter que duplicar em cada model.
+  const normalizedModels = models.map((m) => ({ ...m, provider: m.provider || id }));
+
   function getApiKey(): string {
     const key = process.env[apiKeyEnvVar];
     if (!key) {
@@ -118,7 +122,7 @@ export function createOpenAICompatibleAdapter(config: OpenAICompatibleConfig): L
           // Fallback para lista hardcoded
         }
       }
-      return models;
+      return normalizedModels;
     },
 
     async invoke(request: InvokeRequest): Promise<AsyncIterable<InvokeChunk>> {

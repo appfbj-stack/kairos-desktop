@@ -18,7 +18,6 @@ function safeUuid(): string {
 export function ChatPanel() {
   const activeId = useChatStore((s) => s.activeId);
   const conversations = useChatStore((s) => s.conversations);
-  const conversationIds = useChatStore((s) => s.conversationIds);
   const addMessage = useChatStore((s) => s.addMessage);
   const appendToMessage = useChatStore((s) => s.appendToMessage);
   const finalizeMessage = useChatStore((s) => s.finalizeMessage);

@@ -21,9 +21,9 @@ export const anthropicAdapter: LLMProvider = {
 
   async listModels(): Promise<ModelInfo[]> {
     return [
-      { id: 'claude-3-5-sonnet-20241022', displayName: 'Claude 3.5 Sonnet', contextWindow: 200_000, supportsTools: true, supportsVision: true, inputCostPerMTokens: 3, outputCostPerMTokens: 15 },
-      { id: 'claude-3-5-haiku-20241022', displayName: 'Claude 3.5 Haiku', contextWindow: 200_000, supportsTools: true, supportsVision: true, inputCostPerMTokens: 0.8, outputCostPerMTokens: 4 },
-      { id: 'claude-3-opus-20240229', displayName: 'Claude 3 Opus', contextWindow: 200_000, supportsTools: true, supportsVision: true, inputCostPerMTokens: 15, outputCostPerMTokens: 75 },
+      { id: 'claude-3-5-sonnet-20241022', displayName: 'Claude 3.5 Sonnet', provider: 'anthropic', contextWindow: 200_000, supportsTools: true, supportsVision: true, inputCostPerMTokens: 3, outputCostPerMTokens: 15 },
+      { id: 'claude-3-5-haiku-20241022', displayName: 'Claude 3.5 Haiku', provider: 'anthropic', contextWindow: 200_000, supportsTools: true, supportsVision: true, inputCostPerMTokens: 0.8, outputCostPerMTokens: 4 },
+      { id: 'claude-3-opus-20240229', displayName: 'Claude 3 Opus', provider: 'anthropic', contextWindow: 200_000, supportsTools: true, supportsVision: true, inputCostPerMTokens: 15, outputCostPerMTokens: 75 },
     ];
   },
 

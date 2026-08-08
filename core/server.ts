@@ -332,8 +332,9 @@ export async function buildServer(): Promise<FastifyInstance> {
     },
   );
 
-  app.post('/memory/conversations/:id/messages', async (req, reply) => {
-    const parse = AddMessageInputSchema.safeParse({ ...req.body, conversationId: req.params.id });
+  app.post<{ Params: { id: string } }>('/memory/conversations/:id/messages', async (req, reply) => {
+    const body = (req.body || {}) as Record<string, unknown>;
+    const parse = AddMessageInputSchema.safeParse({ ...body, conversationId: req.params.id });
     if (!parse.success) {
       return reply.code(400).send({ error: 'Invalid input', details: parse.error.flatten() });
     }
@@ -345,7 +346,7 @@ export async function buildServer(): Promise<FastifyInstance> {
     return getMemoryRepository().exportAll();
   });
 
-  app.delete('/memory/all', async (req, reply) => {
+  app.delete('/memory/all', async () => {
     // TODO: requer confirmacao + audit log
     getMemoryRepository().deleteAll();
     return { deleted: true, ts: Date.now() };

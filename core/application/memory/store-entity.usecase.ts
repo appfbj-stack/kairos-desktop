@@ -33,7 +33,7 @@ export class StoreEntityUseCase {
       return repo.storeEntity({
         ...existing,
         ...parsed,
-        relations: parsed.relations,
+        relations: parsed.relations as { type: string; targetSlug: string }[],
         tags: parsed.tags,
         metadata: parsed.metadata,
       });
@@ -46,7 +46,7 @@ export class StoreEntityUseCase {
       name: parsed.name,
       content: parsed.content,
       tags: parsed.tags,
-      relations: parsed.relations,
+      relations: parsed.relations as { type: string; targetSlug: string }[],
       metadata: parsed.metadata,
     });
   }
