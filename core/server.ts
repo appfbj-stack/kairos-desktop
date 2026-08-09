@@ -141,6 +141,63 @@ export async function buildServer(): Promise<FastifyInstance> {
     timestamp: new Date().toISOString(),
   }));
 
+  // Health detalhado: valida chave OpenRouter (precisa estar online e ter credito).
+  // Util apos rotacao de chave pra confirmar que tudo funciona.
+  app.get('/system/health-detailed', async () => {
+    const result: {
+      service: string;
+      version: string;
+      openrouter?: {
+        ok: boolean;
+        httpStatus?: number;
+        limitRemaining?: number;
+        usage?: number;
+        planLabel?: string;
+        error?: string;
+      };
+      skills: number;
+      timestamp: string;
+    } = {
+      service: 'kairos-core',
+      version: '0.1.0',
+      skills: skillRegistry.list().length,
+      timestamp: new Date().toISOString(),
+    };
+
+    const apiKey = process.env.OPENROUTER_API_KEY;
+    if (!apiKey) {
+      result.openrouter = { ok: false, error: 'OPENROUTER_API_KEY nao configurado' };
+      return result;
+    }
+
+    try {
+      const res = await fetch('https://openrouter.ai/api/v1/auth/key', {
+        headers: { Authorization: `Bearer ${apiKey}` },
+      });
+      if (res.ok) {
+        const data = (await res.json()) as { data?: { limit_remaining?: number; usage?: number; limit_label?: string } };
+        result.openrouter = {
+          ok: true,
+          httpStatus: res.status,
+          limitRemaining: data.data?.limit_remaining,
+          usage: data.data?.usage,
+          planLabel: data.data?.limit_label,
+        };
+      } else {
+        const text = await res.text().catch(() => '');
+        result.openrouter = {
+          ok: false,
+          httpStatus: res.status,
+          error: text.slice(0, 200),
+        };
+      }
+    } catch (err) {
+      result.openrouter = { ok: false, error: (err as Error).message };
+    }
+
+    return result;
+  });
+
   // ---------- Static (UI build) ----------
   // Quando rodando standalone (VPS ou dev sem Electron), serve o frontend Vite build.
   // Em dev (npm run dev), o Vite dev server em :5173 que serve a UI.
