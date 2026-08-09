@@ -20,6 +20,7 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { invokeLLMUseCase } from './application/llm/invoke-llm.usecase.js';
 import { listProvidersUseCase } from './application/llm/select-model.usecase.js';
+import { llmRouter } from './infrastructure/llm/router.js';
 import { storeEntityUseCase, StoreEntityInputSchema } from './application/memory/store-entity.usecase.js';
 import { searchEntitiesUseCase, SearchEntitiesInputSchema } from './application/memory/search-entities.usecase.js';
 import { recallEntitiesUseCase } from './application/memory/recall-entities.usecase.js';
@@ -251,6 +252,23 @@ export async function buildServer(): Promise<FastifyInstance> {
       return { error: `Provider not found: ${provider}` };
     }
     return { provider: target.id, models: target.models };
+  });
+
+  // ---------- List FREE models (free-first policy) ----------
+  // Retorna a cadeia de modelos free estaveis para o UI exibir como recomendados.
+  app.get('/llm/free-models', async () => {
+    const providers = await listProvidersUseCase.execute();
+    const openrouter = providers.find((p) => p.id === 'openrouter');
+    if (!openrouter) {
+      return { defaultModel: llmRouter.getProvider().id, freeModels: [], fallbackChain: [] };
+    }
+    const freeModels = openrouter.models.filter((m) => m.tier === 'free');
+    return {
+      defaultModel: llmRouter.getProvider().id + '/' + (process.env.KAIROS_DEFAULT_MODEL || 'nvidia/nemotron-3-super-120b-a12b:free'),
+      freeModels,
+      unstableModels: openrouter.models.filter((m) => m.tier === 'unstable'),
+      fallbackChain: llmRouter.getFreeFallbackChain(),
+    };
   });
 
   // ---------- Chat (streaming SSE) ----------

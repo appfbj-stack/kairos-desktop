@@ -10,6 +10,8 @@
  * @see docs/PRD-TECNICO.md §7
  */
 
+export type ModelTier = 'free' | 'paid' | 'unstable';
+
 export interface ModelInfo {
   id: string;
   displayName: string;
@@ -20,6 +22,14 @@ export interface ModelInfo {
   supportsVision: boolean;
   inputCostPerMTokens: number; // USD
   outputCostPerMTokens: number; // USD
+  /**
+   * Tier do modelo:
+   *   - 'free'    : custo zero, ideal pra SaaS e dev
+   *   - 'paid'    : cobra por token (requer creditos)
+   *   - 'unstable': free mas com rate-limit upstream frequente (ex: gemma-4-31b)
+   * Padrao: 'paid' (se omitido). Detecta :free no id como 'free'.
+   */
+  tier?: ModelTier;
 }
 
 export interface InvokeRequest {

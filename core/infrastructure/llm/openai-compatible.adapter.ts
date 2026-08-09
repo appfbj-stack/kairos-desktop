@@ -13,6 +13,7 @@
 import type {
   LLMProvider,
   ModelInfo,
+  ModelTier,
   InvokeRequest,
   InvokeChunk,
   ChatMessage,
@@ -42,7 +43,12 @@ export function createOpenAICompatibleAdapter(config: OpenAICompatibleConfig): L
 
   // Injeta o campo `provider` em cada model se nao estiver setado.
   // Evita ter que duplicar em cada model.
-  const normalizedModels = models.map((m) => ({ ...m, provider: m.provider || id }));
+  // Tambem detecta o tier: ':free' no id => free, senao usa o do model, senao 'paid'.
+  const normalizedModels = models.map((m) => ({
+    ...m,
+    provider: m.provider || id,
+    tier: m.tier || (m.id.includes(':free') ? 'free' : 'paid'),
+  }));
 
   function getApiKey(): string {
     const key = process.env[apiKeyEnvVar];
@@ -146,16 +152,27 @@ export function createOpenAICompatibleAdapter(config: OpenAICompatibleConfig): L
           });
           if (res.ok) {
             const data = (await res.json()) as { data: any[] };
-            return data.data.map((m: any) => ({
-              id: m.id,
-              displayName: m.name || m.id,
-              provider: id,
-              contextWindow: m.context_length || 4096,
-              supportsTools: !!m.supported_parameters?.includes('tools'),
-              supportsVision: !!m.architecture?.input_modalities?.includes('image'),
-              inputCostPerMTokens: parseFloat(m.pricing?.prompt || '0') * 1_000_000,
-              outputCostPerMTokens: parseFloat(m.pricing?.completion || '0') * 1_000_000,
-            }));
+            // Mapa de tier por id (vindo da lista hardcoded, que eh a fonte da verdade
+            // ja que a API do OpenRouter nao expoe o tier).
+            const tierById = new Map<string, ModelTier>();
+            for (const m of normalizedModels) {
+              tierById.set(m.id, m.tier || (m.id.includes(':free') ? 'free' : 'paid'));
+            }
+            return data.data.map((m: any) => {
+              const knownTier = tierById.get(m.id);
+              const tier: ModelTier = knownTier || (m.id.includes(':free') ? 'free' : 'paid');
+              return {
+                id: m.id,
+                displayName: m.name || m.id,
+                provider: id,
+                contextWindow: m.context_length || 4096,
+                supportsTools: !!m.supported_parameters?.includes('tools'),
+                supportsVision: !!m.architecture?.input_modalities?.includes('image'),
+                inputCostPerMTokens: parseFloat(m.pricing?.prompt || '0') * 1_000_000,
+                outputCostPerMTokens: parseFloat(m.pricing?.completion || '0') * 1_000_000,
+                tier,
+              };
+            });
           }
         } catch {
           // Fallback para lista hardcoded
