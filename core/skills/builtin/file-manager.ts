@@ -1,11 +1,14 @@
 /**
  * file_manager_list - lista arquivos em um diretorio (read-only).
  *
- * MVP: apenas leitura. Delete/move/copy vao pra Fase 4.1
- * com approval flow.
+ * Cross-platform (Linux + Windows + macOS): usa Node puro (fs/promises).
+ * Funciona identico no VPS (Linux) e no Electron desktop (Windows).
+ * MVP: apenas leitura. Delete/move/copy vao pra Fase 4.1 com approval flow.
  */
 
 import type { Skill } from '../types.js';
+import { readdir, stat } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import { execPowerShell, escapePsString } from '../powershell.js';
 
 export const fileManagerList: Skill = {
@@ -37,53 +40,51 @@ export const fileManagerList: Skill = {
       return { content: 'Erro: path vazio', error: true };
     }
 
-    const safePath = escapePsString(rawPath);
-    const script = `
-$ErrorActionPreference = 'Stop'
-try {
-  if (-not (Test-Path -LiteralPath "${safePath}")) {
-    return @{ error = "Caminho nao existe: ${safePath}" } | ConvertTo-Json -Compress
-  }
-  $items = Get-ChildItem -LiteralPath "${safePath}" -Force -ErrorAction Stop |
-    Select-Object -First ${limit} Name, Length, LastWriteTime, PSIsDirectory |
-    ForEach-Object {
-      [PSCustomObject]@{
-        name = $_.Name
-        type = if ($_.PSIsDirectory) { 'dir' } else { 'file' }
-        size = if ($_.PSIsDirectory) { 0 } else { [int64]$_.Length }
-        modified = $_.LastWriteTime.ToString('yyyy-MM-dd HH:mm')
+    const searchPath = rawPath;
+    let entries;
+    try {
+      const s = await stat(searchPath);
+      if (!s.isDirectory()) {
+        return { content: `Erro: caminho nao e diretorio: ${searchPath}`, error: true };
       }
-    }
-  return @{ count = $items.Count; items = $items } | ConvertTo-Json -Depth 4 -Compress
-} catch {
-  return @{ error = $_.Exception.Message } | ConvertTo-Json -Compress
-}
-`.trim();
-
-    const result = await execPowerShell(script, { timeoutMs: 15_000 });
-
-    if (result.timedOut) {
-      return { content: 'Erro: timeout ao listar diretorio', error: true };
-    }
-    if (result.exitCode !== 0 && !result.stdout) {
-      return { content: `Erro PowerShell: ${result.stderr || 'sem output'}`, error: true };
+    } catch (err) {
+      return { content: `Erro: caminho nao existe: ${searchPath} (${(err as Error).message})`, error: true };
     }
 
     try {
-      const parsed = JSON.parse(result.stdout);
-      if (parsed.error) {
-        return { content: `Erro: ${parsed.error}`, error: true };
+      const all = await readdir(searchPath, { withFileTypes: true });
+      const items = [];
+      let i = 0;
+      for (const entry of all) {
+        if (i >= limit) break;
+        const fullPath = resolve(searchPath, entry.name);
+        let size = 0;
+        let modified = 'unknown';
+        try {
+          const st = await stat(fullPath);
+          size = Number(st.size);
+          modified = st.mtime.toISOString().replace('T', ' ').slice(0, 16);
+        } catch { /* ignora */ }
+        items.push({
+          name: entry.name,
+          type: entry.isDirectory() ? 'dir' : 'file',
+          size,
+          modified,
+        });
+        i++;
       }
-      if (!parsed.items || parsed.items.length === 0) {
-        return { content: `Diretorio vazio: ${rawPath}` };
+      if (items.length === 0) {
+        return { content: `Diretorio vazio: ${searchPath}` };
       }
-      const lines = parsed.items.map((it: any) =>
+      const lines = items.map((it) =>
         it.type === 'dir' ? `[DIR]  ${it.name}/` : `[FILE] ${it.name} (${formatSize(it.size)})`
       );
-      const summary = `${parsed.count} itens em ${rawPath}:\n${lines.join('\n')}`;
-      return { content: summary, data: parsed };
+      return {
+        content: `${items.length} itens em ${searchPath}:\n${lines.join('\n')}`,
+        data: { count: items.length, items, path: searchPath },
+      };
     } catch (err) {
-      return { content: `Erro parseando resultado: ${(err as Error).message}\nRaw: ${result.stdout.slice(0, 500)}`, error: true };
+      return { content: `Erro: ${(err as Error).message}`, error: true };
     }
   },
 };
