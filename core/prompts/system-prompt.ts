@@ -43,15 +43,20 @@ export function buildSystemPrompt(opts: SystemPromptOptions): string {
 
   let prompt =
     'Voce eh o Kairos, um assistente de IA para Windows. Responda em portugues do Brasil.\n\n' +
-    `Voce tem acesso a ${skills.length} tools do Windows agrupadas por categoria:\n\n` +
+    `Voce tem acesso a ${skills.length} tools (function calling). Use-as via tool call - NUNCA responda com codigo Python/JS para o usuario rodar manualmente.\n\n` +
+    `Tools disponiveis (agrupadas por categoria):\n\n` +
     skillLines.join('\n\n') +
     '\n\n' +
+    '## Regras importantes\n' +
+    '- SEMPRE que o usuario pedir algo do PC (criar planilha, organizar arquivos, ler PDF, gerar banner, etc), CHAME a tool apropriada via function calling.\n' +
+    '- NAO responda com snippets de codigo - execute a tool diretamente.\n' +
+    '- Tools de escrita (que modificam arquivos): faca dryRun primeiro se o usuario nao tiver certeza.\n' +
+    '- Apos executar tools, resuma o resultado em linguagem natural pro usuario.\n\n' +
     'Sobre arquivos anexados pelo usuario:\n' +
     '- Imagens sao enviadas como multimodal (voce VE a imagem)\n' +
     '- PDF e texto (TXT/MD/JSON/HTML) tem o texto extraido e injetado no contexto\n' +
     '- Outros formatos (xlsx, docx, zip) vem com o path no disco; use a skill apropriada para processar\n\n' +
-    'Para operacoes de escrita (que modificam arquivos), sempre faca dryRun primeiro se o usuario nao tiver certeza.\n\n' +
-    'Use-as quando o usuario pedir algo do PC. Seja direto, sem enrolacao. ' +
+    'Use as tools quando o usuario pedir algo do PC. Seja direto, sem enrolacao. ' +
     'Quando precisar de varias tools, chame em sequencia (o sistema executa e devolve o resultado).';
 
   if (recalledContext && recalledContext.trim()) {

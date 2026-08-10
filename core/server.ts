@@ -311,10 +311,12 @@ export async function buildServer(): Promise<FastifyInstance> {
   });
 
   // ---------- Chat (sync, sem streaming) ----------
-  // Aceita opcionalmente `useTools: true` para habilitar function calling.
-  // Quando useTools=true, o Core executa o tool loop e retorna toolCalls + toolResults.
+  // useTools=true injeta tools do registry no LLM (function calling).
+  // IMPORTANTE: default=true. Se o usuario nao passar nada, assume que
+  // o LLM pode/deve usar as skills registradas. LLM free (nemotron)
+  // suporta tool calling. Se passar tools custom (input.tools), usa essas.
   const ChatSyncSchema = ChatInputSchema.extend({
-    useTools: z.boolean().optional().default(false),
+    useTools: z.boolean().optional().default(true),
   });
 
   app.post<{ Body: z.infer<typeof ChatSyncSchema> }>('/chat/sync', async (req, reply) => {
