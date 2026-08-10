@@ -41,7 +41,6 @@ export const fileManagerList: Skill = {
     }
 
     const searchPath = rawPath;
-    let entries;
     try {
       const s = await stat(searchPath);
       if (!s.isDirectory()) {
