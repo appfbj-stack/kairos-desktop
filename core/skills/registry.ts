@@ -7,6 +7,7 @@ import type { Skill, JsonSchema } from './types.js';
 import { checkSafety } from './safety.js';
 import { fileManagerList, fileManagerRead } from './builtin/file-manager.js';
 import { appLauncherOpen } from './builtin/app-launcher.js';
+import { appListInstalled } from './builtin/app-list-installed.js';
 import { searchFiles } from './builtin/search.js';
 import { clipboardRead, clipboardWrite } from './builtin/clipboard.js';
 import { officeExcelRead } from './builtin/office-excel.js';
@@ -29,6 +30,7 @@ const builtinSkills: Skill[] = [
   fileManagerList,
   fileManagerRead,
   appLauncherOpen,
+  appListInstalled,
   searchFiles,
   // Fase 4.1 - 5 skills adicionais
   clipboardRead,
