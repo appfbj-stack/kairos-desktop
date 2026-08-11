@@ -19,6 +19,7 @@ import { igrejaDocumento } from './builtin/igreja-documento.js';
 import { imageAiGenerator } from './builtin/image-ai-generator.js';
 import { pdfConvert } from './builtin/pdf-converter.js';
 import { browserNavigate } from './builtin/browser-navigate.js';
+import { sshRemote, sshRemoteKey } from './builtin/ssh-remote.js';
 
 // Re-export para conveniência
 export type { Skill, JsonSchema } from './types.js';
@@ -46,6 +47,9 @@ const builtinSkills: Skill[] = [
   igrejaDocumento,
   // Fase 4.5 - gerar imagem via IA multimodal (OpenSquad image-ai-generator port)
   imageAiGenerator,
+  // Fase 5 - SSH bridge (acesso remoto ao PC do usuario)
+  sshRemote,
+  sshRemoteKey,
 ];
 
 class SkillRegistry {
